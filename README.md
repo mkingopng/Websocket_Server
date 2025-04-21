@@ -104,6 +104,24 @@ cargo run -p openlifter-backend-lib-bin -- --config config.toml
 cargo run -p openlifter-backend-lib-bin -- --bind 0.0.0.0:3000
 ```
 
+### Important Cargo Commands
+
+```bash
+# Build the project
+cargo build
+
+# Run the linter to check for code quality issues
+cargo clippy
+
+# Run the application
+cargo run
+```
+
+These commands are essential for development:
+- `cargo build` - Compiles the project and checks for compilation errors
+- `cargo clippy` - Runs the Rust linter to catch common mistakes and suggest improvements
+- `cargo run` - Builds and runs the application
+
 ### Docker
 
 Build the image:
@@ -233,3 +251,224 @@ The client-side integration with OpenLifter requires:
 2. Handling of the client-server protocol
 3. State synchronization with the server
 4. Conflict resolution on the client side
+
+## Development Environment Setup
+
+### Recommended Tools
+
+- **rustup**: Rust toolchain installer
+- **cargo-edit**: For adding dependencies (`cargo install cargo-edit`)
+- **cargo-watch**: For auto-reloading during development (`cargo install cargo-watch`)
+- **cargo-expand**: For macro expansion debugging (`cargo install cargo-expand`)
+- **rust-analyzer**: IDE extension for Rust language support
+
+### VS Code Extensions
+
+- rust-analyzer
+- crates
+- even-better-toml
+- serde-json
+- CodeLLDB
+
+## Troubleshooting
+
+### Common Issues
+
+#### WebSocket Connection Failures
+
+- Check that the server is running and accessible
+- Verify firewall settings aren't blocking WebSocket connections
+- Ensure the client is using the correct WebSocket URL
+
+#### Authentication Issues
+
+- Verify meet ID and password are correct
+- Check that the session hasn't expired
+- Ensure the server's authentication configuration matches client expectations
+
+#### Performance Problems
+
+- Check server logs for bottlenecks
+- Verify the server has sufficient resources
+- Consider increasing the connection pool size
+
+## Contributing Guidelines
+
+We welcome contributions to the OpenLifter WebSocket Server! Here's how you can help:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Code Style
+
+- Follow the Rust standard style guide
+- Run `cargo fmt` before submitting changes
+- Ensure all tests pass with `cargo test`
+- Run `cargo clippy` to catch common mistakes
+
+### Pull Request Process
+
+1. Update the README.md with details of changes if needed
+2. Update the CHANGELOG.md with a note describing your changes
+3. The PR will be merged once you have the sign-off of at least one maintainer
+
+## Version Information
+
+The project follows [Semantic Versioning](https://semver.org/):
+
+- **Major version**: Incompatible API changes
+- **Minor version**: Add functionality in a backward-compatible manner
+- **Patch version**: Backward-compatible bug fixes
+
+To check which version you're running:
+
+```bash
+cargo run -p openlifter-backend-lib-bin -- --version
+```
+
+## Performance Considerations
+
+The WebSocket server is designed to handle multiple concurrent connections efficiently. Here are some performance considerations:
+
+- **Connection Limits**: By default, the server is configured to handle up to 1000 concurrent connections. Adjust this in the configuration if needed.
+- **Resource Usage**: Each WebSocket connection consumes memory. Monitor server resources during high-load periods.
+- **Batch Processing**: Updates are processed in batches to reduce overhead. Adjust batch size in configuration for your use case.
+- **Scaling**: For high-load scenarios, consider running multiple server instances behind a load balancer.
+
+## Security Best Practices
+
+When deploying the OpenLifter WebSocket Server, follow these security best practices:
+
+- **TLS**: Always use TLS for WebSocket connections in production
+- **Authentication**: Enable authentication for all meets
+- **Password Requirements**: Use strong password requirements
+- **Rate Limiting**: Implement rate limiting to prevent abuse
+- **Input Validation**: Validate all client inputs
+- **Regular Updates**: Keep dependencies updated to patch security vulnerabilities
+- **Principle of Least Privilege**: Run the server with minimal required permissions
+
+## Logging Configuration
+
+The server uses structured logging with the following configuration options:
+
+```toml
+[logging]
+level = "info"  # debug, info, warn, error
+format = "json"  # json, text
+file = "logs/server.log"  # Optional file output
+```
+
+To change log levels at runtime:
+
+```bash
+curl -X POST http://localhost:3000/admin/log-level -d '{"level":"debug"}'
+```
+
+## API Documentation
+
+### WebSocket Endpoints
+
+- `/ws`: Main WebSocket endpoint for meet management
+- `/ws/health`: Health check endpoint
+
+### REST Endpoints
+
+- `GET /health`: Server health check
+- `GET /metrics`: Prometheus metrics endpoint
+- `POST /admin/log-level`: Change log level
+
+### Message Format
+
+All messages are JSON-encoded with the following structure:
+
+```json
+{
+  "type": "MessageType",
+  "payload": {
+    // Message-specific fields
+  }
+}
+```
+
+## Development Workflow
+
+### Typical Development Cycle
+
+1. **Setup**: Clone the repository and install dependencies
+2. **Development**: Make changes in a feature branch
+3. **Testing**: Run tests and ensure they pass
+4. **Code Review**: Submit a pull request for review
+5. **Integration**: After approval, merge into the main branch
+6. **Deployment**: Deploy to staging, then production
+
+### Branching Strategy
+
+- `main`: Production-ready code
+- `develop`: Integration branch for features
+- `feature/*`: Feature branches
+- `bugfix/*`: Bug fix branches
+- `release/*`: Release preparation branches
+
+## Dependencies
+
+The project relies on the following major dependencies:
+
+- **axum**: Web framework for building APIs
+- **tokio**: Asynchronous runtime
+- **serde**: Serialization/deserialization
+- **tracing**: Structured logging
+- **metrics**: Metrics collection
+- **config**: Configuration management
+- **tungstenite**: WebSocket implementation
+
+For a complete list of dependencies, see the Cargo.toml files in each crate.
+
+## WebSocket Testing
+
+The repository includes two test scripts to demonstrate and verify the WebSocket server functionality:
+
+### Basic Demonstration
+
+The `demo.sh` script provides a simple demonstration of the WebSocket server:
+
+```bash
+./demo.sh
+```
+
+This script:
+1. Starts the WebSocket server
+2. Connects to it using websocat
+3. Sends a test message to create a meet
+4. Displays the server response
+5. Cleans up resources
+
+### Comprehensive Test
+
+The `websocket_test.sh` script performs a more comprehensive test of the WebSocket server:
+
+```bash
+./websocket_test.sh
+```
+
+This script demonstrates multiple WebSocket operations:
+1. Creating a meet
+2. Joining a meet
+3. Sending updates to a meet
+4. Displaying server responses at each step
+
+### Manual Testing with websocat
+
+You can also test the WebSocket server manually using websocat:
+
+```bash
+# Connect to the WebSocket server
+websocat ws://127.0.0.1:3000/ws
+
+# Send a JSON message (paste into the terminal)
+{"type":"CreateMeet","payload":{"meet_id":"test-meet","password":"TestPassword123!"}}
+```
+
+For more information about websocat, visit [https://github.com/vi/websocat](https://github.com/vi/websocat).
