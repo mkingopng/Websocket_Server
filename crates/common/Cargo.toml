@@ -1,0 +1,10 @@
+[package]
+name    = "openlifter-common"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+uuid       = { workspace = true }   # if you keep `ClientId = Uuid` 

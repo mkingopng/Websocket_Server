@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/common", "crates/backend-lib", "crates/backend-bin"]
+resolver = "2"
+
+# single‑source every version/feature flag here
+[workspace.dependencies]
+axum        = { version = "0.8.3", features = ["ws", "macros"] }
+tokio       = { version = "1.44", features = ["full"] }
+tower-http  = { version = "0.6.2", features = ["cors", "trace"] }
+serde       = { version = "1.0",  features = ["derive"] }
+serde_json  = "1.0"
+tracing     = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+dashmap     = "7.0.0-rc2"
+uuid        = { version = "1",    features = ["v4"] }
+scrypt      = "0.11"
+rand        = "0.9"
+anyhow      = "1"
+thiserror   = "1"
+futures-util = "0.3"
+hyper       = "1.6.0"
+
+[workspace.dev-dependencies]
+tempfile = "3.8"
+tokio    = { workspace = true, features = ["full"] }
+tower    = "0.4"
+cargo-hack = "0.6"
+cargo-deny = "0.14"

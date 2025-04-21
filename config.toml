@@ -1,0 +1,17 @@
+# OpenLifter WebSocket Server Configuration
+
+# Server settings
+bind_addr = "127.0.0.1:3000"
+data_dir = "data"
+log_level = "info"
+
+# Session settings
+session_ttl_secs = 604800  # 7 days
+
+# Password requirements
+[password_requirements]
+min_length = 10
+require_uppercase = true
+require_lowercase = true
+require_digit = true
+require_special = true 
