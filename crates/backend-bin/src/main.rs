@@ -14,14 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     // Initialize configuration
-    // Try to load with explicit path if default doesn't work
-    let config = Settings::load().or_else(|_| {
-        println!("Trying to load config from alternate locations");
-        Settings::load_from("config/default.toml").or_else(|_| {
-            println!("Trying root config/default.toml");
-            Settings::load_from("./config/default.toml")
-        })
-    })?;
+    let config = Settings::load()?;
 
     // Create storage
     let storage = FlatFileStorage::new("data")?;

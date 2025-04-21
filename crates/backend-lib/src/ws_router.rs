@@ -91,26 +91,28 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
     });
 
     // Handle incoming messages
-    while let Some(Ok(msg)) = ws_rx.next().await {
+    while let Some(msg) = ws_rx.next().await {
         match msg {
-            Message::Text(text) => {
+            Ok(Message::Text(text)) => {
+                // Parse the message
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(client_msg) => {
-                        // Extract meet_id for tracking
+                        // Extract meet_id from message if present to update connected_meet_id
                         let meet_id = match &client_msg {
                             ClientMessage::CreateMeet { meet_id, .. } => Some(meet_id.clone()),
                             ClientMessage::JoinMeet { meet_id, .. } => Some(meet_id.clone()),
                             ClientMessage::UpdateInit { meet_id, .. } => Some(meet_id.clone()),
+                            ClientMessage::ClientPull { meet_id, .. } => Some(meet_id.clone()),
+                            ClientMessage::PublishMeet { meet_id, .. } => Some(meet_id.clone()),
                         };
-
+                        
                         // If this is the first message with a meet_id, register the client
                         if connected_meet_id.is_none() && meet_id.is_some() {
-                            let meet_id = meet_id.unwrap();
-                            handler.register_client(&meet_id, server_tx.clone());
-                            connected_meet_id = Some(meet_id);
+                            let meet_id_val = meet_id.clone().unwrap();
+                            handler.register_client(&meet_id_val, server_tx.clone());
+                            connected_meet_id = meet_id.clone();
                         }
-
-                        // Process the message
+                        
                         match handler.handle_message(client_msg).await {
                             Ok(response) => {
                                 // Serialize response to JSON
@@ -124,39 +126,36 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
                                 }
                             },
                             Err(e) => {
-                                let err_msg = serde_json::json!({
-                                    "type": "Error",
-                                    "payload": {
-                                        "code": "INTERNAL_ERROR",
-                                        "message": e.to_string()
-                                    }
-                                });
+                                let err_msg = ServerMessage::Error {
+                                    code: "INTERNAL_ERROR".to_string(),
+                                    message: e.to_string(),
+                                };
                                 
-                                let err_str = err_msg.to_string();
-                                if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
-                                    eprintln!("Failed to send error message: {e}");
-                                    break;
+                                if let Ok(err_str) = serde_json::to_string(&err_msg) {
+                                    if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
+                                        eprintln!("Failed to send error message: {e}");
+                                        break;
+                                    }
                                 }
                             }
                         }
                     },
                     Err(e) => {
-                        let err = serde_json::json!({
-                            "type": "Error",
-                            "payload": {
-                                "code": "MALFORMED_MESSAGE",
-                                "message": e.to_string()
+                        // Handle malformed message
+                        let err_msg = ServerMessage::MalformedMessage {
+                            err_msg: e.to_string(),
+                        };
+                        
+                        if let Ok(err_str) = serde_json::to_string(&err_msg) {
+                            if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
+                                eprintln!("Failed to send error message: {e}");
+                                break;
                             }
-                        });
-                        let err_str = err.to_string();
-                        if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
-                            eprintln!("Failed to send error message: {e}");
-                            break;
                         }
                     }
                 }
             },
-            Message::Close(_) => break,
+            Ok(Message::Close(_)) => break,
             _ => (),
         }
     }

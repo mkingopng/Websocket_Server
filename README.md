@@ -472,3 +472,80 @@ websocat ws://127.0.0.1:3000/ws
 ```
 
 For more information about websocat, visit [https://github.com/vi/websocat](https://github.com/vi/websocat).
+
+---
+
+# project structure
+
+```
+.
+├── .cargo/
+├── .git/
+├── .gitignore
+├── .idea/
+├── Cargo.lock
+├── Cargo.toml
+├── LICENSE
+├── README.md
+├── config/
+│   └── default.toml
+├── config.toml
+├── crates/
+│   ├── backend-bin/
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── main.rs
+│   ├── backend-lib/
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── auth.rs
+│   │       ├── config.rs
+│   │       ├── error.rs
+│   │       ├── lib.rs
+│   │       ├── meet.rs
+│   │       ├── meet_actor.rs
+│   │       ├── messages.rs
+│   │       ├── metrics.rs
+│   │       ├── middleware/
+│   │       │   └── rate_limit.rs
+│   │       ├── storage.rs
+│   │       ├── websocket.rs
+│   │       └── ws_router.rs
+│   └── common/
+│       ├── Cargo.toml
+│       └── src/
+│           └── lib.rs
+├── data/
+│   ├── current-meets/
+│   └── finished-meets/
+├── demo.sh
+├── deny.toml
+├── Dockerfile
+├── infrastructure/
+├── pyproject.toml
+├── repomix-output.txt
+├── rust-toolchain.toml
+├── rustfmt.toml
+├── target/
+└── websocket_test.sh
+```
+
+-----
+
+# Demo
+The demo script has been expanded to better demonstrate the WebSocket server's capabilities as outlined in the original design spec. Here's what the new demo does:
+
+1. **Phase 1**: Creates a meet and stores the meet ID and session token
+2. **Phase 2**: Simulates a second client joining the meet with the same credentials
+3. **Phase 3**: Sends updates from the first client (setting a lifter's name)
+4. **Phase 4**: Sends updates from the second client (setting a lifter's bodyweight)
+5. **Phase 5**: Simulates concurrent updates from both clients to demonstrate potential conflict handling
+6. **Phase 6**: Establishes long-lived WebSocket connections in separate terminals to show real-time updates
+
+The script now illustrates more of the server's capabilities, including:
+- Multi-client support
+- Session management
+- Real-time updates
+- Handling of concurrent modifications
+
+This demo provides a much more comprehensive showcase of the functionality described in the original design spec, demonstrating the WebSocket server's ability to support collaborative meet management.
