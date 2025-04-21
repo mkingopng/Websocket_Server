@@ -32,6 +32,13 @@ pub enum ClientMessage {
         return_email: String,
         opl_csv: String,
     },
+    StateRecoveryResponse {
+        meet_id: String,
+        session_token: String,
+        last_seq_num: u64,
+        updates: Vec<Update>,
+        priority: u8,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +87,15 @@ pub enum ServerMessage {
     Error {
         code: String,
         message: String,
+    },
+    StateRecoveryRequest {
+        meet_id: String,
+        last_known_seq: u64,
+    },
+    StateRecovered {
+        meet_id: String,
+        new_seq_num: u64,
+        updates_recovered: usize,
     },
 }
 

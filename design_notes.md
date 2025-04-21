@@ -15,30 +15,33 @@ We need to address all these items eventually. Let's start with the most foundat
 - [x] Implement proper conflict resolution based on priority levels
 - [x] Add validation for all incoming messages
 
-### 3. ⬜ Data Recovery Mechanisms
-- [ ] Implement state recovery when clients or server go offline
-- [ ] Ensure proper event sequence tracking and replay
-- [ ] Test recovery scenarios
+### 3. 🔄 Data Recovery Mechanisms
+- [x] Implement state recovery protocol (message types and handlers)
+- [x] Add client state recovery response handling
+- [x] Implement conflict resolution during recovery based on priority
+- [ ] Implement automated state inconsistency detection
+- [ ] Add proper sequence tracking with gap detection
+- [ ] Test recovery scenarios with multiple clients
 
-### 4. ⬜ Integration with OpenLifter Frontend
-- [ ] Create the "Live (Advanced)" tab components
-- [ ] Build WebSocket integration with the Redux store
-- [ ] Connect UI events to WebSocket messages
-
-### 5. ⬜ Security Enhancements
+### 4. ⬜ Security Enhancements
 - [ ] Review and strengthen authentication
 - [ ] Add rate limiting and other protections
 - [ ] Implement proper session expiry
 
-### 6. ⬜ Documentation & Testing
+### 5. ⬜ Documentation & Testing
 - [ ] Create comprehensive API docs
 - [ ] Write integration tests
 - [ ] Add load testing
 
-### 7. ⬜ Production Readiness
+### 6. ⬜ Production Readiness
 - [ ] Complete Docker configuration
 - [ ] Add monitoring & logging
 - [ ] Create deployment scripts
+
+### 7. ⬜ Integration with OpenLifter Frontend
+- [ ] Create the "Live (Advanced)" tab components
+- [ ] Build WebSocket integration with the Redux store
+- [ ] Connect UI events to WebSocket messages
 
 ### 8. ⬜ Advanced Features
 - [ ] Livestream overlay support

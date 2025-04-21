@@ -97,6 +97,12 @@ pub struct UpdateWithServerSeq {
     /// Server-assigned sequence number
     #[serde(rename = "serverSeqNum")]
     pub server_seq_num: Seq,
+    /// ID of the client that created this update
+    #[serde(rename = "sourceClientId", default)]
+    pub source_client_id: String,
+    /// Priority of the client that created this update
+    #[serde(rename = "sourceClientPriority", default)]
+    pub source_client_priority: u8,
 }
 
 /// Messages sent from server to client

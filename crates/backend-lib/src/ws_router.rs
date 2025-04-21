@@ -103,7 +103,8 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
                                     | ClientMessage::JoinMeet { meet_id, .. }
                                     | ClientMessage::UpdateInit { meet_id, .. }
                                     | ClientMessage::ClientPull { meet_id, .. }
-                                    | ClientMessage::PublishMeet { meet_id, .. } => {
+                                    | ClientMessage::PublishMeet { meet_id, .. }
+                                    | ClientMessage::StateRecoveryResponse { meet_id, .. } => {
                                         Some(meet_id.clone())
                                     },
                                 };
@@ -113,6 +114,9 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
                                     let meet_id_val = meet_id.clone().unwrap();
                                     handler.register_client(&meet_id_val, server_tx.clone());
                                     connected_meet_id = meet_id;
+
+                                    // Note: Removed the async recovery check to avoid borrowing issues
+                                    // Recovery is now manually initiated or automatically triggered in handle_message
                                 }
 
                                 match handler.handle_message(client_msg).await {

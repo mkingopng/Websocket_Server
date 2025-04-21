@@ -29,6 +29,13 @@ pub enum ActorMsg {
         return_email: String,
         resp_tx: mpsc::UnboundedSender<Result<(), AppError>>,
     },
+    // New message type for state recovery
+    RecoverState {
+        updates: Vec<crate::messages::Update>,
+        client_id: String,
+        priority: u8,
+        resp_tx: mpsc::UnboundedSender<Result<(u64, usize), AppError>>,
+    },
 }
 
 /// Handle that other components keep: command channel + broadcast sender
@@ -105,6 +112,27 @@ impl MeetHandle {
             .await
             .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
     }
+
+    pub async fn recover_state(
+        &self,
+        client_id: String,
+        priority: u8,
+        updates: Vec<crate::messages::Update>,
+    ) -> Result<(u64, usize), AppError> {
+        let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
+
+        self.cmd_tx.send(ActorMsg::RecoverState {
+            client_id,
+            priority,
+            updates,
+            resp_tx,
+        })?;
+
+        resp_rx
+            .recv()
+            .await
+            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+    }
 }
 
 pub struct MeetActor<S: Storage> {
@@ -136,8 +164,8 @@ impl<S: Storage> MeetActor<S> {
 
     pub async fn handle_update(
         &mut self,
-        _client_id: String,
-        _priority: u8,
+        client_id: String,
+        priority: u8,
         updates: Vec<Update>,
     ) -> Result<Vec<(u64, u64)>, AppError> {
         let mut results = Vec::new();
@@ -150,6 +178,8 @@ impl<S: Storage> MeetActor<S> {
             let update_with_seq = UpdateWithServerSeq {
                 update: update.clone(),
                 server_seq_num: seq,
+                source_client_id: client_id.clone(),
+                source_client_priority: priority,
             };
 
             // Apply the update to our state
@@ -209,6 +239,98 @@ impl<S: Storage> MeetActor<S> {
         self.state.clone()
     }
 
+    /// Process client updates for state recovery
+    ///
+    /// This method is used when the server needs to recover its state from client updates.
+    /// It applies updates with proper sequence numbering and conflict resolution.
+    pub async fn handle_state_recovery(
+        &mut self,
+        client_id: String,
+        priority: u8,
+        updates: Vec<crate::messages::Update>,
+    ) -> Result<(u64, usize), AppError> {
+        let original_seq = self.server_seq;
+        let mut applied_updates = 0;
+
+        if updates.is_empty() {
+            return Ok((self.server_seq, 0));
+        }
+
+        // Sort updates by timestamp to ensure proper ordering
+        let mut sorted_updates = updates.clone();
+        sorted_updates.sort_by_key(|u| u.timestamp);
+
+        // Track existing update keys to avoid duplicates
+        let existing_keys: std::collections::HashSet<String> =
+            self.updates_by_key.keys().cloned().collect();
+
+        // Process each update
+        for update in sorted_updates {
+            // Convert messages::Update to openlifter_common::Update
+            // This is a temporary solution to handle the type mismatch
+            let common_update = openlifter_common::Update {
+                update_key: update.location.clone(),
+                update_value: serde_json::from_str(&update.value)
+                    .unwrap_or(serde_json::Value::Null),
+                #[allow(clippy::cast_sign_loss)]
+                local_seq_num: update.timestamp as u64, // Use timestamp as local sequence number
+                after_server_seq_num: 0, // Default to 0 for recovery
+            };
+
+            // Skip if we already have this update
+            if existing_keys.contains(&common_update.update_key) {
+                // Check if we should override based on priority
+                if let Some(existing) = self.updates_by_key.get(&common_update.update_key) {
+                    // If existing update has higher or equal priority, skip this update
+                    // This is a simplified conflict resolution strategy
+                    if priority <= existing.source_client_priority {
+                        continue;
+                    }
+                }
+            }
+
+            // Apply the update
+            self.server_seq += 1;
+            let seq = self.server_seq;
+
+            let update_with_seq = UpdateWithServerSeq {
+                update: common_update,
+                server_seq_num: seq,
+                source_client_id: client_id.clone(),
+                source_client_priority: priority,
+            };
+
+            // Apply to state
+            self.apply_update(&update_with_seq);
+
+            // Store in maps
+            self.updates_by_key.insert(
+                update_with_seq.update.update_key.clone(),
+                update_with_seq.clone(),
+            );
+            self.updates.push(update_with_seq.clone());
+
+            // Store in persistent storage
+            let json = serde_json::to_string(&update_with_seq)?;
+            self.storage.append_update(&self.meet_id, &json).await?;
+
+            // Update counter
+            applied_updates += 1;
+
+            // We don't broadcast during recovery to avoid duplicates
+        }
+
+        if applied_updates > 0 {
+            // Log recovery stats
+            println!(
+                "Recovered {} updates for meet {} from client {}, seq {} -> {}",
+                applied_updates, self.meet_id, client_id, original_seq, self.server_seq
+            );
+        }
+
+        Ok((self.server_seq, applied_updates))
+    }
+
     pub async fn run(mut self, mut rx: mpsc::UnboundedReceiver<ActorMsg>) {
         while let Some(msg) = rx.recv().await {
             match msg {
@@ -231,6 +353,17 @@ impl<S: Storage> MeetActor<S> {
                     resp_tx,
                 } => {
                     let result = self.store_csv_data(opl_csv, return_email).await;
+                    let _ = resp_tx.send(result);
+                },
+                ActorMsg::RecoverState {
+                    client_id,
+                    priority,
+                    updates,
+                    resp_tx,
+                } => {
+                    let result = self
+                        .handle_state_recovery(client_id, priority, updates)
+                        .await;
                     let _ = resp_tx.send(result);
                 },
             }
@@ -275,99 +408,100 @@ mod tests {
     use tempfile::TempDir;
     use tokio;
 
-    fn setup() -> (MeetActor<FlatFileStorage>, TempDir) {
+    async fn setup() -> (MeetHandle, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
-        let (relay_tx, _) = broadcast::channel(100);
-        let actor = MeetActor::new("test-meet".to_string(), storage, relay_tx);
-        (actor, temp_dir)
+        let handle = spawn_meet_actor("test-meet", storage).await;
+        // Small delay to ensure actor is ready
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        (handle, temp_dir)
     }
 
     #[tokio::test]
     async fn test_handle_update() {
-        let (mut actor, _temp_dir) = setup();
-        let client_id = "client1".to_string();
-        let priority = 1;
-        let updates = vec![Update {
-            update_key: "test.key".to_string(),
-            update_value: serde_json::json!("value"),
+        let (actor, _temp_dir) = setup().await;
+
+        let updates = vec![openlifter_common::Update {
+            update_key: "test.key1".to_string(),
+            update_value: serde_json::json!("value1"),
             local_seq_num: 1,
             after_server_seq_num: 0,
         }];
 
         let result = actor
-            .handle_update(client_id, priority, updates)
+            .apply_updates("client1".to_string(), 5, updates)
             .await
             .unwrap();
+
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].0, 1); // server_seq
-        assert_eq!(result[0].1, 1); // local_seq
+        assert_eq!(result[0].0, 1); // server_seq should be 1
+
+        // Get updates since 0 to verify state
+        let updates_since_0 = actor.get_updates_since(0).await.unwrap();
+        assert_eq!(updates_since_0.len(), 1);
     }
 
     #[tokio::test]
     async fn test_get_updates_since() {
-        let (mut actor, _temp_dir) = setup();
+        let (actor, _temp_dir) = setup().await;
 
-        // Add some updates
-        let updates = vec![
-            Update {
-                update_key: "key1".to_string(),
-                update_value: serde_json::json!("value1"),
-                local_seq_num: 1,
-                after_server_seq_num: 0,
-            },
-            Update {
-                update_key: "key2".to_string(),
-                update_value: serde_json::json!("value2"),
-                local_seq_num: 2,
-                after_server_seq_num: 1,
-            },
-        ];
+        // First add updates through the handle API
+        let update1 = openlifter_common::Update {
+            update_key: "test.key1".to_string(),
+            update_value: serde_json::json!("value1"),
+            local_seq_num: 1,
+            after_server_seq_num: 0,
+        };
 
+        let update2 = openlifter_common::Update {
+            update_key: "test.key2".to_string(),
+            update_value: serde_json::json!("value2"),
+            local_seq_num: 2,
+            after_server_seq_num: 1,
+        };
+
+        // Apply the first update
         actor
-            .handle_update("client1".to_string(), 1, updates)
+            .apply_updates("client1".to_string(), 1, vec![update1])
             .await
             .unwrap();
 
-        // Get updates since seq 1
-        let updates = actor.get_updates_since(1);
-        assert_eq!(updates.len(), 1);
-        assert_eq!(updates[0].server_seq_num, 2);
+        // Apply the second update
+        actor
+            .apply_updates("client1".to_string(), 1, vec![update2])
+            .await
+            .unwrap();
+
+        // Test get_updates_since
+        let updates_since_0 = actor.get_updates_since(0).await.unwrap();
+        assert_eq!(updates_since_0.len(), 2);
+
+        let updates_since_1 = actor.get_updates_since(1).await.unwrap();
+        assert_eq!(updates_since_1.len(), 1);
+        assert_eq!(updates_since_1[0].server_seq_num, 2);
     }
 
     #[tokio::test]
     async fn test_apply_update() {
-        let (mut actor, _temp_dir) = setup();
+        let (actor, _temp_dir) = setup().await;
 
-        let update = UpdateWithServerSeq {
-            update: Update {
-                update_key: "test.key".to_string(),
-                update_value: serde_json::json!("value"),
-                local_seq_num: 1,
-                after_server_seq_num: 0,
-            },
-            server_seq_num: 1,
+        let update = openlifter_common::Update {
+            update_key: "plate.weight".to_string(),
+            update_value: serde_json::json!(25),
+            local_seq_num: 1,
+            after_server_seq_num: 0,
         };
 
-        actor.apply_update(&update);
+        // Apply the update
+        actor
+            .apply_updates("client1".to_string(), 1, vec![update])
+            .await
+            .unwrap();
 
-        let state = actor.get_state();
-        assert_eq!(state["test.key"], "value");
-    }
-
-    #[tokio::test]
-    async fn test_meet_handle() {
-        let temp_dir = TempDir::new().unwrap();
-        let _storage = FlatFileStorage::new(temp_dir.path()).unwrap();
-        let handle = MeetHandle::new("test-meet".to_string());
-
-        // Verify channels are created
-        assert!(handle
-            .cmd_tx
-            .send(ActorMsg::Pull {
-                since: 0,
-                resp_tx: mpsc::unbounded_channel().0,
-            })
-            .is_ok());
+        // Verify that we can get the update
+        let updates = actor.get_updates_since(0).await.unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].update.update_key, "plate.weight");
+        assert_eq!(updates[0].update.update_value, serde_json::json!(25));
     }
 }

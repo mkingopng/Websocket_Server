@@ -25,6 +25,8 @@ argon2           = "0.5.3"
 parking_lot      = "0.12.3"
 tracing          = { workspace = true }
 tracing-subscriber = { workspace = true }
+tokio-tungstenite = "0.26.2"
+futures = "0.3.31"
 
 [dev-dependencies]
 tempfile = { workspace = true }

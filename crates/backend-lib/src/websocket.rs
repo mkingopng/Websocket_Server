@@ -42,7 +42,7 @@ const MAX_RECONNECT_ATTEMPTS: u8 = 5;
 const RECONNECT_DELAY_MS: u64 = 1000; // 1 second
 
 /// WebSocket handler for processing messages
-pub struct WebSocketHandler<S: Storage + Send + Sync + 'static> {
+pub struct WebSocketHandler<S: Storage + Send + Sync + Clone + 'static> {
     state: Arc<AppState<S>>,
     client_id: String,
     client_tx: Option<mpsc::Sender<ServerMessage>>,
@@ -50,7 +50,7 @@ pub struct WebSocketHandler<S: Storage + Send + Sync + 'static> {
     reconnect_attempts: u8,
 }
 
-impl<S: Storage + Send + Sync + 'static> WebSocketHandler<S> {
+impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     pub fn new(state: Arc<AppState<S>>) -> Self {
         Self {
             state,
@@ -287,6 +287,111 @@ impl<S: Storage + Send + Sync + 'static> WebSocketHandler<S> {
         Err(anyhow!("Session is no longer valid"))
     }
 
+    /// Initiate state recovery for a meet
+    ///
+    /// This method is called when the server detects a state inconsistency
+    /// or after restart. It broadcasts a request to all connected clients
+    /// to send their update logs.
+    pub async fn initiate_state_recovery(&self, meet_id: &str, last_known_seq: u64) -> Result<()> {
+        println!("Initiating state recovery for meet {meet_id} from seq {last_known_seq}");
+
+        // Create recovery request message
+        let recovery_msg = ServerMessage::StateRecoveryRequest {
+            meet_id: meet_id.to_string(),
+            last_known_seq,
+        };
+
+        // Send to all connected clients for this meet
+        if let Some(clients) = self.state.clients.get(meet_id) {
+            let client_count = clients.len();
+
+            // Use a JoinSet to send to all clients concurrently
+            let mut send_tasks = tokio::task::JoinSet::new();
+
+            for client in clients.iter() {
+                let client_clone = client.clone();
+                let recovery_msg_clone = recovery_msg.clone();
+
+                send_tasks.spawn(async move { client_clone.send(recovery_msg_clone).await });
+            }
+
+            // Wait for tasks to complete
+            while let Some(result) = send_tasks.join_next().await {
+                // Just log errors
+                if let Err(e) = result {
+                    println!("Error sending recovery request: {e}");
+                }
+            }
+
+            println!("State recovery requested from {client_count} clients for meet {meet_id}");
+        } else {
+            println!("No clients connected for meet {meet_id}, recovery not possible");
+        }
+
+        Ok(())
+    }
+
+    /// Handle a state recovery response from a client
+    ///
+    /// This method processes updates from a client during state recovery,
+    /// resolving conflicts and updating the server's state.
+    async fn handle_state_recovery_response(
+        &self,
+        meet_id: &str,
+        session_token: &str,
+        _last_seq_num: u64,
+        updates: Vec<Update>,
+        priority: u8,
+    ) -> Result<ServerMessage> {
+        // Validate session
+        let session_valid = self.state.auth.validate_session(session_token).await;
+        if !session_valid {
+            return Ok(ServerMessage::InvalidSession {
+                session_token: session_token.to_string(),
+            });
+        }
+
+        println!(
+            "Processing state recovery response from client {} with {} updates",
+            self.client_id,
+            updates.len()
+        );
+
+        // Get handle to the meet actor using if let instead of match
+        let meet_handle = if let Some(handle) = self.state.meet_handles.get(meet_id) {
+            handle.clone()
+        } else {
+            // Create a new meet actor if one doesn't exist
+            let storage = self.state.storage.clone();
+            let handle = crate::meet_actor::spawn_meet_actor(meet_id, storage).await;
+            self.state
+                .meet_handles
+                .insert(meet_id.to_string(), handle.clone());
+            handle
+        };
+
+        // Process the recovery updates
+        let (new_seq, updates_recovered) = match meet_handle
+            .recover_state(self.client_id.clone(), priority, updates)
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                return Ok(ServerMessage::Error {
+                    code: "RECOVERY_ERROR".to_string(),
+                    message: e.to_string(),
+                });
+            },
+        };
+
+        // Notify the client that recovery is complete
+        Ok(ServerMessage::StateRecovered {
+            meet_id: meet_id.to_string(),
+            new_seq_num: new_seq,
+            updates_recovered,
+        })
+    }
+
     /// Handle incoming client messages
     ///
     /// This is the main entry point for processing incoming WebSocket messages from clients.
@@ -301,6 +406,7 @@ impl<S: Storage + Send + Sync + 'static> WebSocketHandler<S> {
     /// - `UpdateInit`: Send updates to the server and broadcast to other clients
     /// - `ClientPull`: Request updates from the server since a specific sequence number
     /// - `PublishMeet`: Publish meet results and generate CSV output
+    /// - `StateRecoveryResponse`: Handle state recovery responses
     ///
     /// # Network Resilience
     ///
@@ -535,6 +641,23 @@ impl<S: Storage + Send + Sync + 'static> WebSocketHandler<S> {
                         },
                     }
                 }
+            },
+            ClientMessage::StateRecoveryResponse {
+                meet_id,
+                session_token,
+                last_seq_num,
+                updates,
+                priority,
+            } => {
+                // Handle state recovery response
+                self.handle_state_recovery_response(
+                    &meet_id,
+                    &session_token,
+                    last_seq_num,
+                    updates,
+                    priority,
+                )
+                .await
             },
         }
     }
@@ -880,5 +1003,148 @@ mod tests {
             .unwrap();
         assert_eq!(same_location_update.source_client, "client1");
         assert_eq!(same_location_update.priority, 5);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_handle_state_recovery_response() {
+        let (mut handler, _state, _temp_dir) = setup();
+
+        // Create a meet first
+        let create_result = handler
+            .handle_message(ClientMessage::CreateMeet {
+                meet_id: "recovery-test".to_string(),
+                password: "Password123!".to_string(),
+                location_name: "Recovery Test".to_string(),
+                priority: 5,
+            })
+            .await
+            .unwrap();
+
+        // Extract session token using let...else pattern
+        let ServerMessage::MeetCreated {
+            meet_id: _,
+            session_token,
+        } = create_result
+        else {
+            panic!("Expected MeetCreated response")
+        };
+
+        // Create some initial updates
+        let initial_updates = vec![
+            Update {
+                location: "test.item1".to_string(),
+                value: r#"{"name":"Item 1","value":123}"#.to_string(),
+                timestamp: 12345,
+            },
+            Update {
+                location: "test.item2".to_string(),
+                value: r#"{"name":"Item 2","value":456}"#.to_string(),
+                timestamp: 12346,
+            },
+        ];
+
+        // Send recovery response
+        let recovery_result = handler
+            .handle_message(ClientMessage::StateRecoveryResponse {
+                meet_id: "recovery-test".to_string(),
+                session_token: session_token.clone(),
+                last_seq_num: 0,
+                updates: initial_updates,
+                priority: 5,
+            })
+            .await
+            .unwrap();
+
+        // Verify the result
+        match recovery_result {
+            ServerMessage::StateRecovered {
+                meet_id,
+                new_seq_num,
+                updates_recovered,
+            } => {
+                assert_eq!(meet_id, "recovery-test");
+                assert_eq!(new_seq_num, 2); // Two updates should have been processed
+                assert_eq!(updates_recovered, 2);
+            },
+            _ => panic!("Expected StateRecovered response"),
+        }
+
+        // Now test with conflicting updates
+        let conflicting_updates = vec![
+            // This should be accepted as it's a new key
+            Update {
+                location: "test.item3".to_string(),
+                value: r#"{"name":"Item 3","value":789}"#.to_string(),
+                timestamp: 12347,
+            },
+            // This should be rejected as it's an existing key with same priority (5)
+            Update {
+                location: "test.item1".to_string(),
+                value: r#"{"name":"Item 1 Updated","value":999}"#.to_string(),
+                timestamp: 12348,
+            },
+        ];
+
+        // Send second recovery response
+        let second_recovery_result = handler
+            .handle_message(ClientMessage::StateRecoveryResponse {
+                meet_id: "recovery-test".to_string(),
+                session_token: session_token.clone(),
+                last_seq_num: 2,
+                updates: conflicting_updates,
+                priority: 5, // Same priority, so conflict should be ignored
+            })
+            .await
+            .unwrap();
+
+        // Verify the result
+        match second_recovery_result {
+            ServerMessage::StateRecovered {
+                meet_id,
+                new_seq_num,
+                updates_recovered,
+            } => {
+                assert_eq!(meet_id, "recovery-test");
+                assert_eq!(new_seq_num, 3); // Only one new update should have been processed
+                assert_eq!(updates_recovered, 1);
+            },
+            _ => panic!("Expected StateRecovered response"),
+        }
+
+        // Now test with higher priority updates
+        let higher_priority_updates = vec![
+            // This should be accepted as it's a higher priority
+            Update {
+                location: "test.item1".to_string(),
+                value: r#"{"name":"Item 1 Override","value":1000}"#.to_string(),
+                timestamp: 12349,
+            },
+        ];
+
+        // Send third recovery response with higher priority
+        let third_recovery_result = handler
+            .handle_message(ClientMessage::StateRecoveryResponse {
+                meet_id: "recovery-test".to_string(),
+                session_token,
+                last_seq_num: 3,
+                updates: higher_priority_updates,
+                priority: 10, // Higher priority, so conflict should be accepted
+            })
+            .await
+            .unwrap();
+
+        // Verify the result
+        match third_recovery_result {
+            ServerMessage::StateRecovered {
+                meet_id,
+                new_seq_num: _,
+                updates_recovered,
+            } => {
+                assert_eq!(meet_id, "recovery-test");
+                assert_eq!(updates_recovered, 1); // The override should be accepted
+            },
+            _ => panic!("Expected StateRecovered response"),
+        }
     }
 }

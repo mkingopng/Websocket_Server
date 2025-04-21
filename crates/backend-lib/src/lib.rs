@@ -18,6 +18,7 @@ pub mod ws_router;
 
 use crate::auth::{AuthService, DefaultAuth, SessionManager};
 use crate::config::Settings;
+use crate::meet_actor::MeetHandle;
 use crate::middleware::rate_limit::RateLimiter;
 use crate::storage::FlatFileStorage;
 use std::error::Error;
@@ -39,6 +40,8 @@ pub struct AppState<S> {
     /// Connected clients by meet ID
     pub clients:
         Arc<dashmap::DashMap<String, Vec<tokio::sync::mpsc::Sender<messages::ServerMessage>>>>,
+    /// Active meet handles
+    pub meet_handles: Arc<dashmap::DashMap<String, MeetHandle>>,
 }
 
 impl<S> AppState<S> {
@@ -49,6 +52,7 @@ impl<S> AppState<S> {
         let settings = Arc::new(config.clone());
         let rate_limiter = Arc::new(RateLimiter::new(std::time::Duration::from_secs(60), 100));
         let clients = Arc::new(dashmap::DashMap::new());
+        let meet_handles = Arc::new(dashmap::DashMap::new());
 
         Ok(Self {
             auth,
@@ -57,6 +61,7 @@ impl<S> AppState<S> {
             settings,
             rate_limiter,
             clients,
+            meet_handles,
         })
     }
 

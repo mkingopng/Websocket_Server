@@ -206,6 +206,21 @@ pub fn validate_client_message(message: &ClientMessage) -> ValidationResult<()> 
                 ));
             }
         },
+        ClientMessage::StateRecoveryResponse {
+            meet_id,
+            session_token,
+            last_seq_num: _,
+            updates,
+            priority: _,
+        } => {
+            validate_meet_id(meet_id)?;
+            validate_session_token(session_token)?;
+
+            // Validate each update
+            for update in updates {
+                validate_update(update)?;
+            }
+        },
     }
 
     Ok(())
