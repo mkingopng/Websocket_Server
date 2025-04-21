@@ -61,7 +61,7 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if let Err(e) = ws_tx.send(msg).await {
-                eprintln!("Failed to send message: {}", e);
+                eprintln!("Failed to send message: {e}");
                 break;
             }
         }
@@ -84,7 +84,7 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
                             });
                             let err_str = err.to_string();
                             if let Err(e) = err_tx.send(Message::Text(err_str.into())).await {
-                                eprintln!("Failed to send error message: {}", e);
+                                eprintln!("Failed to send error message: {e}");
                                 break;
                             }
                         }
@@ -99,7 +99,7 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
                         });
                         let err_str = err.to_string();
                         if let Err(e) = tx.send(Message::Text(err_str.into())).await {
-                            eprintln!("Failed to send error message: {}", e);
+                            eprintln!("Failed to send error message: {e}");
                             break;
                         }
                     }

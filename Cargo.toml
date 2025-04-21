@@ -21,8 +21,3 @@ futures-util = "0.3.30"
 hyper       = "1.1.0"
 tower       = { version = "0.4.13", features = ["util"] }
 tempfile    = "3.10.0"
-
-[workspace.dev-dependencies]
-tempfile = { workspace = true }
-tokio    = { workspace = true, features = ["full"] }
-tower    = { workspace = true }

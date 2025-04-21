@@ -39,7 +39,7 @@ pub struct AppState<S> {
 
 impl<S> AppState<S> {
     /// Create a new application state
-    pub fn new(storage: S, config: Settings) -> Result<Self, Box<dyn Error>> {
+    pub fn new(storage: S, config: &Settings) -> Result<Self, Box<dyn Error>> {
         let sessions = Arc::new(SessionManager::new());
         let auth = Arc::new(DefaultAuth::new((*sessions).clone()));
         let settings = Arc::new(config.clone());
@@ -64,6 +64,6 @@ impl<S> AppState<S> {
     {
         let storage = S::from(FlatFileStorage::new("data")?);
         let settings = Settings::load()?;
-        Self::new(storage, settings).map_err(|e| anyhow::anyhow!("{}", e))
+        Self::new(storage, &settings).map_err(|e| anyhow::anyhow!("{}", e))
     }
 } 

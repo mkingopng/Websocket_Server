@@ -312,7 +312,7 @@ mod tests {
             server_seq_num: 1,
         };
 
-        actor.apply_update(&update).unwrap();
+        actor.apply_update(&update);
         
         let state = actor.get_state();
         assert_eq!(state["test.key"], "value");
@@ -321,7 +321,7 @@ mod tests {
     #[tokio::test]
     async fn test_meet_handle() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
+        let _storage = FlatFileStorage::new(temp_dir.path()).unwrap();
         let handle = MeetHandle::new("test-meet".to_string());
 
         // Verify channels are created

@@ -68,11 +68,7 @@ impl RateLimiter {
             true
         } else {
             entry.count += 1;
-            if entry.count > self.max_requests {
-                false
-            } else {
-                true
-            }
+            entry.count <= self.max_requests
         }
     }
 
@@ -84,7 +80,7 @@ impl RateLimiter {
     }
 }
 
-pub async fn check_rate_limit<S: Storage + Send + Sync + 'static>(
+pub fn check_rate_limit<S: Storage + Send + Sync + 'static>(
     state: &Arc<AppState<S>>,
     client_ip: &str,
 ) -> Result<(), AppError> {
