@@ -1,0 +1,29 @@
+[advisories]
+# Deny any advisories that have been published
+deny = ["RUSTSEC-2023-0001"]
+
+[licenses]
+# Allow only MIT, Apache-2.0, and BSD-3-Clause
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause"]
+# Deny all other licenses
+deny = ["*"]
+
+[bans]
+# Deny specific dependencies
+deny = [
+    { name = "ring", reason = "Security vulnerability" },
+]
+
+[source]
+# Deny specific sources
+deny = [
+    { source = "git+https://github.com/rust-lang/rust.git", reason = "Use crates.io instead" },
+]
+
+[metadata]
+# Require metadata for all dependencies
+require = ["description", "repository", "license", "documentation"]
+
+[wildcards]
+# Deny wildcard dependencies
+deny = ["*"] 
