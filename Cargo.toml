@@ -19,10 +19,12 @@ anyhow      = "1"
 thiserror   = "1"
 futures-util = "0.3"
 hyper       = "1.6.0"
+tower       = { version = "0.4", features = ["util"] }
+tempfile    = "3.8"
 
 [workspace.dev-dependencies]
-tempfile = "3.8"
+tempfile = { workspace = true }
 tokio    = { workspace = true, features = ["full"] }
-tower    = "0.4"
+tower    = { workspace = true }
 cargo-hack = "0.6"
 cargo-deny = "0.14"

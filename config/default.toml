@@ -1,0 +1,13 @@
+# Server configuration
+port = 3000
+host = "127.0.0.1"
+
+# Logging configuration
+log_level = "info"
+
+# Storage configuration
+data_dir = "data"
+
+# Metrics configuration
+enable_metrics = false
+metrics_port = 9091 

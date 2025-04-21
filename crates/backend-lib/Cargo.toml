@@ -1,5 +1,5 @@
 [package]
-name    = "openlifter-backend-lib"
+name    = "backend-lib"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -28,8 +28,9 @@ figment           = "0.10"
 zeroize           = "1.7"
 metrics           = "0.21"
 metrics-exporter-prometheus = "0.12"
+log               = "0.4"
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = { workspace = true }
 tokio    = { workspace = true, features = ["full"] }
-tower    = "0.4" 
+tower    = { workspace = true } 

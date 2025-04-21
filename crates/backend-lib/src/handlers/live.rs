@@ -5,11 +5,12 @@
 use tokio::sync::mpsc;
 use axum::extract::ws::Message;
 use openlifter_common::{ClientToServer, ServerToClient};
-use crate::{AppState, error::AppError, meet_actor::MeetHandle};
+use crate::{AppState, error::AppError};
 use crate::auth::{hash_password, verify_password, validate_password_strength, PasswordRequirements};
 use rand::Rng;
 use metrics::{counter, histogram};
 use std::time::Instant;
+use log;
 
 /// Handle a client message
 pub async fn handle_client_message(
@@ -24,11 +25,11 @@ pub async fn handle_client_message(
             // Validate password strength
             let requirements = PasswordRequirements::default();
             if !validate_password_strength(&password, &requirements) {
-                let err = ServerToClient::MeetCreationRejected { 
-                    reason: format!("Password must be at least {} characters and contain uppercase, lowercase, digit, and special character", requirements.min_length) 
+                let err = ServerToClient::MalformedMessage { 
+                    err_msg: format!("Password must be at least {} characters and contain uppercase, lowercase, digit, and special character", requirements.min_length) 
                 };
                 let json = serde_json::to_string(&err)?;
-                tx.send(Message::Text(json)).await?;
+                tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
                 return Ok(());
             }
             
@@ -51,12 +52,12 @@ pub async fn handle_client_message(
             let handle = state.meets.create_meet(meet_id.clone(), state.storage.clone()).await;
             
             // Create a session
-            let session_token = state.auth.new_session(meet_id.clone(), this_location_name, endpoints[0].priority).await;
+            let session_token = state.auth_srv.new_session(meet_id.clone(), this_location_name, endpoints[0].priority).await;
             
             // Send response
             let reply = ServerToClient::MeetCreated { meet_id, session_token };
             let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json)).await?;
+            tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
             
             // Update metrics
             counter!("meet.created", 1);
@@ -68,9 +69,11 @@ pub async fn handle_client_message(
             
             // Verify password
             if !verify_password(&meet_info.password_hash, &password) {
-                let err = ServerToClient::JoinRejected { reason: "Invalid password".to_string() };
+                let err = ServerToClient::MalformedMessage { 
+                    err_msg: "Invalid password".to_string() 
+                };
                 let json = serde_json::to_string(&err)?;
-                tx.send(Message::Text(json)).await?;
+                tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
                 return Ok(());
             }
             
@@ -81,93 +84,98 @@ pub async fn handle_client_message(
                 .unwrap_or(0);
             
             // Create session
-            let session_token = state.auth.new_session(meet_id.clone(), location_name, priority).await;
+            let session_token = state.auth_srv.new_session(meet_id.clone(), location_name, priority).await;
             
             // Send response
-            let reply = ServerToClient::Joined { session_token };
+            let reply = ServerToClient::MeetJoined { session_token };
             let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json)).await?;
+            tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
             
             // Update metrics
             counter!("meet.joined", 1);
         }
         
-        ClientToServer::Update { session_token, updates } => {
+        ClientToServer::UpdateInit { session_token, updates } => {
             // Validate session
-            if !state.auth.validate_session(&session_token).await {
-                let err = ServerToClient::UpdateRejected { reason: "Invalid session".to_string() };
-                let json = serde_json::to_string(&err)?;
-                tx.send(Message::Text(json)).await?;
-                return Ok(());
-            }
-            
-            // Get session info
-            let session = state.auth.get(&session_token).await
-                .ok_or_else(|| AppError::Auth("Session not found".to_string()))?;
-            
-            // Get meet handle
-            let meet_handle = state.meets.get_meet(&session.meet_id)
-                .ok_or_else(|| AppError::MeetNotFound)?;
-            
-            // Send update to actor
-            let (resp_tx, mut resp_rx) = tokio::sync::mpsc::unbounded_channel();
-            meet_handle.cmd_tx.send(crate::meet_actor::ActorMsg::Update {
-                client_id: session.location_name,
-                priority: session.priority,
-                updates,
-                resp_tx,
+            let session = state.auth_srv.get_session(&session_token).await.ok_or_else(|| {
+                AppError::Auth("Invalid session".to_string())
             })?;
+
+            // Get meet handle
+            let meet = state.meets.get_meet(&session.meet_id).ok_or_else(|| {
+                AppError::MeetNotFound
+            })?;
+
+            // Store updates length before moving
+            let updates_len = updates.len();
             
-            // Wait for response
-            let result = resp_rx.recv().await
-                .ok_or_else(|| AppError::Internal("Actor disconnected".to_string()))??;
-            
+            // Apply updates
+            let results = meet.apply_updates(
+                session.location_name.clone(),
+                session.priority,
+                updates,
+            ).await?;
+
             // Send response
-            let reply = ServerToClient::UpdateAccepted { seqs: result };
+            let reply = ServerToClient::UpdateAck { update_acks: results };
             let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json)).await?;
-            
+            tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+
             // Update metrics
-            counter!("update.accepted", 1);
-            histogram!("update.batch_size", updates.len() as f64);
+            counter!("meet.update", 1, "meet_id" => session.meet_id.clone());
+            histogram!("update.batch_size", updates_len as f64);
         }
         
-        ClientToServer::Pull { session_token, since } => {
+        ClientToServer::ClientPull { session_token, last_server_seq: since } => {
             // Validate session
-            if !state.auth.validate_session(&session_token).await {
-                let err = ServerToClient::PullRejected { reason: "Invalid session".to_string() };
-                let json = serde_json::to_string(&err)?;
-                tx.send(Message::Text(json)).await?;
-                return Ok(());
-            }
-            
-            // Get session info
-            let session = state.auth.get(&session_token).await
-                .ok_or_else(|| AppError::Auth("Session not found".to_string()))?;
-            
-            // Get meet handle
-            let meet_handle = state.meets.get_meet(&session.meet_id)
-                .ok_or_else(|| AppError::MeetNotFound)?;
-            
-            // Send pull request to actor
-            let (resp_tx, mut resp_rx) = tokio::sync::mpsc::unbounded_channel();
-            meet_handle.cmd_tx.send(crate::meet_actor::ActorMsg::Pull {
-                since,
-                resp_tx,
+            let session = state.auth_srv.get_session(&session_token).await.ok_or_else(|| {
+                AppError::Auth("Invalid session".to_string())
             })?;
-            
-            // Wait for response
-            let updates = resp_rx.recv().await
-                .ok_or_else(|| AppError::Internal("Actor disconnected".to_string()))??;
-            
+
+            // Get meet handle
+            let meet = state.meets.get_meet(&session.meet_id).ok_or_else(|| {
+                AppError::MeetNotFound
+            })?;
+
+            // Get updates since last seen
+            let updates = meet.get_updates_since(since).await?;
+
             // Send response
-            let reply = ServerToClient::Updates { updates };
+            let reply = ServerToClient::ServerPull {
+                last_server_seq: since,
+                updates_relayed: updates.clone(),
+            };
             let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json)).await?;
-            
+            tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+
             // Update metrics
-            counter!("pull.accepted", 1);
+            counter!("meet.pull", 1, "meet_id" => session.meet_id.clone());
             histogram!("pull.updates_count", updates.len() as f64);
+        }
+        
+        ClientToServer::PublishMeet { session_token, return_email, opl_csv } => {
+            // Validate session
+            let session = state.auth_srv.get_session(&session_token).await.ok_or_else(|| {
+                AppError::Auth("Invalid session".to_string())
+            })?;
+
+            // Get meet handle
+            let meet = state.meets.get_meet(&session.meet_id).ok_or_else(|| {
+                AppError::MeetNotFound
+            })?;
+
+            // Store CSV data
+            let csv_len = opl_csv.len();
+            meet.store_csv_data(opl_csv, return_email).await?;
+
+            // Send response
+            let reply = ServerToClient::PublishAck;
+            let json = serde_json::to_string(&reply)?;
+            tx.send(Message::Text(json.into())).await.map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+
+            // Update metrics
+            counter!("meet.publish", 1, "meet_id" => session.meet_id.clone());
+            histogram!("publish.csv_size", csv_len as f64);
         }
     };
     
@@ -175,5 +183,5 @@ pub async fn handle_client_message(
     let duration = start.elapsed();
     histogram!("handler.duration_ms", duration.as_millis() as f64);
     
-    result
+    Ok(())
 } 

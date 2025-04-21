@@ -21,7 +21,7 @@ class WSBackendStack(Stack):
         # Request a TLS cert for subdomain
         cert = acm.Certificate(
             self, "BackendCert",
-            domain_name="backend.apl-lights.com",
+            domain_name="backend-lib.apl-lights.com",
             validation=acm.CertificateValidation.from_dns(zone)
         )
 
@@ -37,13 +37,13 @@ class WSBackendStack(Stack):
             desired_count=1,
             memory_limit_mib=512,
             public_load_balancer=True,
-            domain_name="backend.apl-lights.com",
+            domain_name="backend-lib.apl-lights.com",
             domain_zone=zone,
             certificate=cert,
             listener_port=443,
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
                 image=ecs.ContainerImage.from_registry(
-                    "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/ws-backend"
+                    "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/ws-backend-lib"
                 ),
                 container_port=9001,
             )
@@ -57,5 +57,5 @@ class WSBackendStack(Stack):
             self, "BackendDNS",
             zone=zone,
             target=route53.RecordTarget.from_alias(targets.LoadBalancerTarget(fargate_service.load_balancer)),
-            record_name="backend"
+            record_name="backend-lib"
         )

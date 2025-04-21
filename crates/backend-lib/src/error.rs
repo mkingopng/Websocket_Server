@@ -4,48 +4,95 @@
 //! Central error type + Axum integration.
 use axum::{
     response::{IntoResponse, Response},
+    http::StatusCode,
 };
-use axum::http::StatusCode;
+use thiserror::Error;
 use std::fmt;
 
-#[derive(Debug)]
+/// Application error types with error codes and context
+#[derive(Error, Debug)]
 pub enum AppError {
+    #[error("Authentication error: {0}")]
     Auth(String),
+
+    #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Not found: {0}")]
     NotFound(String),
-    Io(std::io::Error),
-    Json(serde_json::Error),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Invalid password")]
     InvalidPassword,
+
+    #[error("Meet not found")]
     MeetNotFound,
+
+    #[error("Invalid meet ID")]
     InvalidMeetId,
+
+    #[error("Rate limit exceeded")]
+    RateLimitExceeded,
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl AppError {
+    /// Get the HTTP status code for this error
+    pub fn status_code(&self) -> StatusCode {
         match self {
-            AppError::Auth(msg) => write!(f, "Authentication error: {}", msg),
-            AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
-            AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            AppError::Io(err) => write!(f, "IO error: {}", err),
-            AppError::Json(err) => write!(f, "JSON error: {}", err),
-            AppError::InvalidPassword => write!(f, "Invalid password"),
-            AppError::MeetNotFound => write!(f, "Meet not found"),
-            AppError::InvalidMeetId => write!(f, "Invalid meet ID"),
+            AppError::Auth(_) | AppError::InvalidPassword => StatusCode::UNAUTHORIZED,
+            AppError::NotFound(_) | AppError::MeetNotFound => StatusCode::NOT_FOUND,
+            AppError::InvalidMeetId | AppError::InvalidInput(_) => StatusCode::BAD_REQUEST,
+            AppError::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    /// Get the error code for this error
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            AppError::Auth(_) => "AUTH_001",
+            AppError::Internal(_) => "INT_001",
+            AppError::NotFound(_) => "NF_001",
+            AppError::Io(_) => "IO_001",
+            AppError::Json(_) => "JSON_001",
+            AppError::InvalidPassword => "AUTH_002",
+            AppError::MeetNotFound => "MEET_001",
+            AppError::InvalidMeetId => "MEET_002",
+            AppError::RateLimitExceeded => "RATE_001",
+            AppError::InvalidInput(_) => "VAL_001",
         }
     }
 }
 
-impl std::error::Error for AppError {}
-
-impl From<std::io::Error> for AppError {
-    fn from(err: std::io::Error) -> Self {
-        AppError::Io(err)
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let status = self.status_code();
+        let error_code = self.error_code();
+        let message = self.to_string();
+        
+        // Create a JSON response with error details
+        let body = serde_json::json!({
+            "error": {
+                "code": error_code,
+                "message": message,
+            }
+        });
+        
+        (status, axum::Json(body)).into_response()
     }
 }
 
-impl From<serde_json::Error> for AppError {
-    fn from(err: serde_json::Error) -> Self {
-        AppError::Json(err)
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for AppError {
+    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        AppError::Internal("Failed to send message".to_string())
     }
 }
 
@@ -58,26 +105,5 @@ impl From<String> for AppError {
 impl From<&str> for AppError {
     fn from(msg: &str) -> Self {
         AppError::Internal(msg.to_string())
-    }
-}
-
-impl AppError {
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            AppError::Auth(_) => StatusCode::UNAUTHORIZED,
-            AppError::NotFound(_) => StatusCode::NOT_FOUND,
-            AppError::InvalidPassword => StatusCode::UNAUTHORIZED,
-            AppError::MeetNotFound => StatusCode::NOT_FOUND,
-            AppError::InvalidMeetId => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let status = self.status_code();
-        let body = format!("{}", self);
-        (status, body).into_response()
     }
 } 

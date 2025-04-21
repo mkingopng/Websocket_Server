@@ -95,30 +95,30 @@ cargo test -p openlifter-backend-lib test_name
 
 ```bash
 # Run with default settings
-cargo run -p openlifter-backend-bin
+cargo run -p openlifter-backend-lib-bin
 
 # Run with custom config
-cargo run -p openlifter-backend-bin -- --config config.toml
+cargo run -p openlifter-backend-lib-bin -- --config config.toml
 
 # Run with custom bind address
-cargo run -p openlifter-backend-bin -- --bind 0.0.0.0:3000
+cargo run -p openlifter-backend-lib-bin -- --bind 0.0.0.0:3000
 ```
 
 ### Docker
 
 Build the image:
 ```bash
-docker build -t openlifter-backend .
+docker build -t openlifter-backend-lib .
 ```
 
 Run the container:
 ```bash
-docker run -p 3000:3000 -v data:/app/data openlifter-backend
+docker run -p 3000:3000 -v data:/app/data openlifter-backend-lib
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GPL-3 License - see the LICENSE file for details.
 
 ## Project Structure
 

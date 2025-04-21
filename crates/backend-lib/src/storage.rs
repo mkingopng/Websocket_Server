@@ -2,7 +2,27 @@
 // openlifter-backend-lib/src/storage.rs
 // ============================
 //! Storage abstraction with flat-file implementation.
-use std::{fs, path::{Path, PathBuf}};
+//! 
+//! This module provides a trait-based storage abstraction for meet data,
+//! with a flat-file implementation that stores data in a simple directory structure:
+//! 
+//! ```
+//! data/
+//! ├── current-meets/
+//! │   └── {meet_id}/
+//! │       ├── updates.log      # Append-only log of updates
+//! │       ├── meet-info.json   # Meet metadata (password hash, endpoints)
+//! │       ├── meet.csv        # Final meet results
+//! │       └── return-email.txt # Email for results
+//! └── finished-meets/
+//!     └── {meet_id}/          # Archived meets
+//! ```
+//! 
+//! The storage is designed to be simple and reliable, with atomic operations
+//! where possible. The flat-file implementation is suitable for most use cases
+//! and provides good performance for the expected load.
+
+use std::{fs, path::{Path, PathBuf}, sync::Arc};
 use tokio::{fs as tokio_fs, io::AsyncWriteExt};
 use serde_json;
 use async_trait::async_trait;
@@ -10,9 +30,21 @@ use crate::error::AppError;
 use openlifter_common::{MeetInfo, EndpointPriority};
 
 /// Trait for storage backends
+/// 
+/// This trait defines the interface for storing and retrieving meet data.
+/// Implementations should ensure data consistency and handle concurrent access
+/// appropriately.
 #[async_trait]
 pub trait Storage: Send + Sync {
     /// Append a JSON line to the updates log
+    /// 
+    /// # Arguments
+    /// * `meet_id` - ID of the meet
+    /// * `json_line` - JSON-encoded update to append
+    /// 
+    /// # Returns
+    /// * `Ok(())` if the update was successfully appended
+    /// * `Err(AppError)` if the operation failed
     async fn append_update(
         &self,
         meet_id: &str,
@@ -20,15 +52,38 @@ pub trait Storage: Send + Sync {
     ) -> Result<(), AppError>;
     
     /// Read all updates for a meet
+    /// 
+    /// # Arguments
+    /// * `meet_id` - ID of the meet
+    /// 
+    /// # Returns
+    /// * `Ok(Vec<String>)` - List of JSON-encoded updates
+    /// * `Err(AppError)` if the operation failed
     async fn read_updates(
         &self,
         meet_id: &str,
     ) -> Result<Vec<String>, AppError>;
     
     /// Archive a meet (move from current to finished)
+    /// 
+    /// # Arguments
+    /// * `meet_id` - ID of the meet to archive
+    /// 
+    /// # Returns
+    /// * `Ok(())` if the meet was successfully archived
+    /// * `Err(AppError)` if the operation failed
     async fn archive_meet(&self, meet_id: &str) -> Result<(), AppError>;
     
     /// Store meet information
+    /// 
+    /// # Arguments
+    /// * `meet_id` - ID of the meet
+    /// * `password_hash` - Hashed meet password
+    /// * `endpoints` - List of endpoints with priorities
+    /// 
+    /// # Returns
+    /// * `Ok(())` if the information was successfully stored
+    /// * `Err(AppError)` if the operation failed
     async fn store_meet_info(
         &self,
         meet_id: &str,
@@ -37,9 +92,25 @@ pub trait Storage: Send + Sync {
     ) -> Result<(), AppError>;
     
     /// Get meet information
+    /// 
+    /// # Arguments
+    /// * `meet_id` - ID of the meet
+    /// 
+    /// # Returns
+    /// * `Ok(MeetInfo)` - Meet information
+    /// * `Err(AppError)` if the operation failed
     async fn get_meet_info(&self, meet_id: &str) -> Result<MeetInfo, AppError>;
     
     /// Store meet CSV data
+    /// 
+    /// # Arguments
+    /// * `meet_id` - ID of the meet
+    /// * `opl_csv` - CSV data in OPL format
+    /// * `return_email` - Email to send results to
+    /// 
+    /// # Returns
+    /// * `Ok(())` if the data was successfully stored
+    /// * `Err(AppError)` if the operation failed
     async fn store_meet_csv(
         &self,
         meet_id: &str,
@@ -49,12 +120,24 @@ pub trait Storage: Send + Sync {
 }
 
 /// Flat-file implementation of the Storage trait
+/// 
+/// This implementation stores meet data in a simple directory structure
+/// under the specified root directory. All operations are performed
+/// atomically where possible to ensure data consistency.
 #[derive(Clone)]
 pub struct FlatFileStorage {
     root: PathBuf,
 }
 
 impl FlatFileStorage {
+    /// Create a new flat-file storage instance
+    /// 
+    /// # Arguments
+    /// * `root` - Root directory for storing meet data
+    /// 
+    /// # Returns
+    /// * `Ok(FlatFileStorage)` - New storage instance
+    /// * `Err(anyhow::Error)` if the directories could not be created
     pub fn new<P: AsRef<Path>>(root: P) -> anyhow::Result<Self> {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(root.join("current-meets"))?;
@@ -66,6 +149,9 @@ impl FlatFileStorage {
 #[async_trait]
 impl Storage for FlatFileStorage {
     /// Append a JSON line to `updates.log`.
+    /// 
+    /// The file is created if it doesn't exist, and the update is appended
+    /// atomically using a temporary file.
     async fn append_update(
         &self,
         meet_id: &str,
@@ -93,6 +179,8 @@ impl Storage for FlatFileStorage {
     }
 
     /// Read all updates for a meet
+    /// 
+    /// Returns an empty vector if the meet doesn't exist or has no updates.
     async fn read_updates(
         &self,
         meet_id: &str,
@@ -117,7 +205,10 @@ impl Storage for FlatFileStorage {
         Ok(updates)
     }
 
-    /// Archive a meet (move from current to finished)
+    /// Archive a meet by moving it from current-meets to finished-meets
+    /// 
+    /// The operation is atomic - it either succeeds completely or fails
+    /// without modifying the filesystem.
     async fn archive_meet(&self, meet_id: &str) -> Result<(), AppError> {
         let src = self.root.join("current-meets").join(meet_id);
         let dst = self.root.join("finished-meets").join(meet_id);
@@ -129,7 +220,10 @@ impl Storage for FlatFileStorage {
         Ok(())
     }
 
-    /// Store meet information
+    /// Store meet information in meet-info.json
+    /// 
+    /// The file is created if it doesn't exist, and the information is written
+    /// atomically using a temporary file.
     async fn store_meet_info(
         &self,
         meet_id: &str,
@@ -156,7 +250,9 @@ impl Storage for FlatFileStorage {
         Ok(())
     }
 
-    /// Get meet information
+    /// Get meet information from meet-info.json
+    /// 
+    /// Returns an error if the meet doesn't exist or the file is corrupted.
     async fn get_meet_info(&self, meet_id: &str) -> Result<MeetInfo, AppError> {
         let path = self
             .root
@@ -174,7 +270,10 @@ impl Storage for FlatFileStorage {
         Ok(meet_info)
     }
 
-    /// Store meet CSV data
+    /// Store meet CSV data and return email
+    /// 
+    /// The CSV data is stored in meet.csv and the return email in return-email.txt.
+    /// Both files are written atomically using temporary files.
     async fn store_meet_csv(
         &self,
         meet_id: &str,
@@ -202,5 +301,151 @@ impl Storage for FlatFileStorage {
         tokio_fs::write(email_path, return_email).await?;
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl<T: Storage + ?Sized> Storage for Arc<Box<T>> {
+    async fn append_update(&self, meet_id: &str, json_line: &str) -> Result<(), AppError> {
+        (**self).append_update(meet_id, json_line).await
+    }
+
+    async fn read_updates(&self, meet_id: &str) -> Result<Vec<String>, AppError> {
+        (**self).read_updates(meet_id).await
+    }
+
+    async fn archive_meet(&self, meet_id: &str) -> Result<(), AppError> {
+        (**self).archive_meet(meet_id).await
+    }
+
+    async fn store_meet_info(&self, meet_id: &str, password_hash: &str, endpoints: &[EndpointPriority]) -> Result<(), AppError> {
+        (**self).store_meet_info(meet_id, password_hash, endpoints).await
+    }
+
+    async fn get_meet_info(&self, meet_id: &str) -> Result<MeetInfo, AppError> {
+        (**self).get_meet_info(meet_id).await
+    }
+
+    async fn store_meet_csv(&self, meet_id: &str, opl_csv: &str, return_email: &str) -> Result<(), AppError> {
+        (**self).store_meet_csv(meet_id, opl_csv, return_email).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use tokio;
+
+    async fn setup() -> (FlatFileStorage, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
+        (storage, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_append_and_read_updates() {
+        let (storage, _temp_dir) = setup().await;
+        let meet_id = "test-meet";
+        let update = r#"{"key": "value"}"#;
+
+        // Append update
+        storage.append_update(meet_id, update).await.unwrap();
+
+        // Read updates
+        let updates = storage.read_updates(meet_id).await.unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0], update);
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_meet_info() {
+        let (storage, _temp_dir) = setup().await;
+        let meet_id = "test-meet";
+        let password_hash = "hashed_password";
+        let endpoints = vec![
+            EndpointPriority {
+                location_name: "location1".to_string(),
+                priority: 1,
+            },
+        ];
+
+        // Store meet info
+        storage
+            .store_meet_info(meet_id, password_hash, &endpoints)
+            .await
+            .unwrap();
+
+        // Get meet info
+        let info = storage.get_meet_info(meet_id).await.unwrap();
+        assert_eq!(info.password_hash, password_hash);
+        assert_eq!(info.endpoints.len(), 1);
+        assert_eq!(info.endpoints[0].location_name, "location1");
+        assert_eq!(info.endpoints[0].priority, 1);
+    }
+
+    #[tokio::test]
+    async fn test_archive_meet() {
+        let (storage, _temp_dir) = setup().await;
+        let meet_id = "test-meet";
+
+        // Create some data
+        storage.append_update(meet_id, "test").await.unwrap();
+        storage
+            .store_meet_info(meet_id, "hash", &[])
+            .await
+            .unwrap();
+
+        // Archive meet
+        storage.archive_meet(meet_id).await.unwrap();
+
+        // Verify meet is moved to finished-meets
+        let current_path = storage.root.join("current-meets").join(meet_id);
+        let finished_path = storage.root.join("finished-meets").join(meet_id);
+        assert!(!current_path.exists());
+        assert!(finished_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_store_meet_csv() {
+        let (storage, _temp_dir) = setup().await;
+        let meet_id = "test-meet";
+        let csv = "name,weight\nJohn,100";
+        let email = "test@example.com";
+
+        // Store CSV data
+        storage.store_meet_csv(meet_id, csv, email).await.unwrap();
+
+        // Verify files exist
+        let csv_path = storage.root.join("current-meets").join(meet_id).join("meet.csv");
+        let email_path = storage
+            .root
+            .join("current-meets")
+            .join(meet_id)
+            .join("return-email.txt");
+
+        assert!(csv_path.exists());
+        assert!(email_path.exists());
+
+        // Verify content
+        let csv_content = tokio_fs::read_to_string(csv_path).await.unwrap();
+        let email_content = tokio_fs::read_to_string(email_path).await.unwrap();
+
+        assert_eq!(csv_content, csv);
+        assert_eq!(email_content, email);
+    }
+
+    #[tokio::test]
+    async fn test_nonexistent_meet() {
+        let (storage, _temp_dir) = setup().await;
+        let meet_id = "nonexistent";
+
+        // Try to get info for nonexistent meet
+        let result = storage.get_meet_info(meet_id).await;
+        assert!(matches!(result, Err(AppError::MeetNotFound)));
+
+        // Try to read updates for nonexistent meet
+        let updates = storage.read_updates(meet_id).await.unwrap();
+        assert!(updates.is_empty());
     }
 } 

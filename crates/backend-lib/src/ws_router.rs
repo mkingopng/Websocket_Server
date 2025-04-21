@@ -48,6 +48,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::channel(32);
 
+    // Helper function to handle errors consistently
+    let handle_error = |e: AppError| -> ServerToClient {
+        ServerToClient::MalformedMessage { err_msg: e.to_string() }
+    };
+
+    // Helper function to send error messages
+    let send_error = |tx: &mpsc::Sender<Message>, err: ServerToClient| {
+        if let Ok(json) = serde_json::to_string(&err) {
+            let _ = tx.try_send(Message::Text(json.into()));
+        }
+    };
+
     // Handle incoming messages
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
@@ -56,19 +68,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     Ok(client_msg) => {
                         match handle_client_message(client_msg, &state, tx.clone()).await {
                             Ok(_) => (),
-                            Err(e) => {
-                                let err = ServerToClient::MalformedMessage { err_msg: e.to_string() };
-                                if let Ok(json) = serde_json::to_string(&err) {
-                                    let _ = tx.send(Message::Text(json)).await;
-                                }
-                            }
+                            Err(e) => send_error(&tx, handle_error(e)),
                         }
                     }
                     Err(e) => {
-                        let err = ServerToClient::MalformedMessage { err_msg: e.to_string() };
-                        if let Ok(json) = serde_json::to_string(&err) {
-                            let _ = tx.send(Message::Text(json)).await;
-                        }
+                        let err = ServerToClient::MalformedMessage { 
+                            err_msg: format!("Failed to parse message: {}", e) 
+                        };
+                        send_error(&tx, err);
                     }
                 }
             }
