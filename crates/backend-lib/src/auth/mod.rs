@@ -4,11 +4,14 @@
 //! Authentication module.
 
 pub mod password;
-pub mod session;
 mod service;
 mod service_impl;
+pub mod session;
 
-pub use password::{hash_password, verify_password, validate_password_strength, PasswordRequirements, MIN_PASSWORD_LENGTH};
-pub use session::{SessionManager, SESSION_TTL};
+pub use password::{
+    hash_password, validate_password_strength, verify_password, PasswordRequirements,
+    MIN_PASSWORD_LENGTH,
+};
 pub use service::AuthService;
-pub use service_impl::DefaultAuth; 
+pub use service_impl::DefaultAuth;
+pub use session::{SessionManager, SESSION_TTL};

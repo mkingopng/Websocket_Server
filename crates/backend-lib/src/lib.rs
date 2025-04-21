@@ -3,25 +3,25 @@
 // ============================
 //! Core backend-lib functionality for the `OpenLifter` WebSocket server.
 
-pub mod config;
-pub mod storage;
-pub mod messages;
 pub mod auth;
-pub mod meet;
+pub mod config;
 pub mod error;
+pub mod meet;
+pub mod meet_actor;
+pub mod messages;
 pub mod metrics;
 pub mod middleware;
-pub mod ws_router;
-pub mod meet_actor;
+pub mod storage;
+pub mod validation;
 pub mod websocket;
+pub mod ws_router;
 
-use std::sync::Arc;
-use std::error::Error;
 use crate::auth::{AuthService, DefaultAuth, SessionManager};
 use crate::config::Settings;
-use crate::storage::FlatFileStorage;
 use crate::middleware::rate_limit::RateLimiter;
-use dashmap;
+use crate::storage::FlatFileStorage;
+use std::error::Error;
+use std::sync::Arc;
 
 /// Application state shared across all handlers
 #[derive(Clone)]
@@ -30,14 +30,15 @@ pub struct AppState<S> {
     pub auth: Arc<dyn AuthService>,
     /// Session manager
     pub sessions: Arc<SessionManager>,
-    /// Settings manager
-    pub settings: Arc<Settings>,
     /// Storage backend
     pub storage: S,
+    /// Configuration settings
+    pub settings: Arc<Settings>,
     /// Rate limiter
     pub rate_limiter: Arc<RateLimiter>,
     /// Connected clients by meet ID
-    pub clients: Arc<dashmap::DashMap<String, Vec<tokio::sync::mpsc::Sender<messages::ServerMessage>>>>,
+    pub clients:
+        Arc<dashmap::DashMap<String, Vec<tokio::sync::mpsc::Sender<messages::ServerMessage>>>>,
 }
 
 impl<S> AppState<S> {
@@ -46,24 +47,21 @@ impl<S> AppState<S> {
         let sessions = Arc::new(SessionManager::new());
         let auth = Arc::new(DefaultAuth::new((*sessions).clone()));
         let settings = Arc::new(config.clone());
-        let rate_limiter = Arc::new(RateLimiter::new(
-            std::time::Duration::from_secs(60),
-            100,
-        ));
+        let rate_limiter = Arc::new(RateLimiter::new(std::time::Duration::from_secs(60), 100));
         let clients = Arc::new(dashmap::DashMap::new());
-        
+
         Ok(Self {
             auth,
             sessions,
-            settings,
             storage,
+            settings,
             rate_limiter,
             clients,
         })
     }
-    
+
     /// Create a new application state with default settings
-    pub fn new_default() -> Result<Self, anyhow::Error> 
+    pub fn new_default() -> Result<Self, anyhow::Error>
     where
         S: From<FlatFileStorage>,
     {
@@ -71,4 +69,4 @@ impl<S> AppState<S> {
         let settings = Settings::load()?;
         Self::new(storage, &settings).map_err(|e| anyhow::anyhow!("{}", e))
     }
-} 
+}

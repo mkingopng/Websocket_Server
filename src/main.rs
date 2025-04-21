@@ -1,7 +1,12 @@
-use backend_lib::{config::Settings, storage::FlatFileStorage, ws_router, AppState};
-use std::net::SocketAddr;
 use std::sync::Arc;
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
+use backend_lib::{
+    AppState, 
+    config::Settings, 
+    storage::FlatFileStorage,
+    ws_router,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -9,7 +14,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     // Initialize configuration
-    let config = Settings::load()?;
+    // Try to load with explicit path if default doesn't work
+    let config = Settings::load().or_else(|_| {
+        println!("Trying to load config from ../../config/default.toml");
+        Settings::load_from("../../config/default.toml")
+    })?;
 
     // Create storage
     let storage = FlatFileStorage::new("data")?;
@@ -28,4 +37,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app).await?;
 
     Ok(())
-}
+} 

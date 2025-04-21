@@ -2,12 +2,12 @@
 // openlifter-backend-lib/src/auth/session.rs
 // ============================
 //! Session token handling and management.
+use super::AuthService;
+use crate::messages::Session;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use async_trait::async_trait;
-use crate::messages::Session;
-use super::AuthService;
 
 /// Session TTL (time to live)
 pub const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600); // 1 hour
@@ -33,8 +33,13 @@ impl SessionManager {
     }
 
     /// Create a new session
-    pub async fn create_session(&self, meet_id: String) -> Session {
-        let session = Session::new(meet_id);
+    pub async fn create_session(
+        &self,
+        meet_id: String,
+        location_name: String,
+        priority: u8,
+    ) -> Session {
+        let session = Session::new(meet_id, location_name, priority);
         let token = session.token.clone();
         self.sessions.write().await.insert(token, session.clone());
         session
@@ -65,8 +70,8 @@ impl SessionManager {
 
 #[async_trait]
 impl AuthService for SessionManager {
-    async fn new_session(&self, meet_id: String, _location_name: String, _priority: u8) -> String {
-        let session = self.create_session(meet_id).await;
+    async fn new_session(&self, meet_id: String, location_name: String, priority: u8) -> String {
+        let session = self.create_session(meet_id, location_name, priority).await;
         session.token
     }
 
@@ -77,4 +82,4 @@ impl AuthService for SessionManager {
     async fn validate_session(&self, token: &str) -> bool {
         self.validate_session(token).await
     }
-} 
+}

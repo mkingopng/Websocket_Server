@@ -131,4 +131,4 @@ pub struct MeetInfo {
     pub meet_id: String,
     pub password_hash: String,
     pub clients: Vec<ClientInfo>,
-} 
+}

@@ -1,13 +1,13 @@
 // ============================
 // openlifter-backend-lib/src/meet_actor.rs
 // ============================
-use std::collections::HashMap;
-use tokio::sync::{mpsc, broadcast};
-use openlifter_common::{Update, UpdateWithServerSeq};
-use crate::{storage::Storage, error::AppError};
-use uuid::Uuid;
-use serde_json::Value;
+use crate::{error::AppError, storage::Storage};
 use metrics::{counter, histogram};
+use openlifter_common::{Update, UpdateWithServerSeq};
+use serde_json::Value;
+use std::collections::HashMap;
+use tokio::sync::{broadcast, mpsc};
+use uuid::Uuid;
 
 pub type ClientId = Uuid;
 
@@ -42,16 +42,14 @@ impl MeetHandle {
     pub fn new(meet_id: String) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let (relay_tx, _) = broadcast::channel(100);
-        
-        let storage = crate::storage::FlatFileStorage::new("data").expect("Failed to initialize storage");
+
+        let storage =
+            crate::storage::FlatFileStorage::new("data").expect("Failed to initialize storage");
         let actor = MeetActor::new(meet_id, storage, relay_tx.clone());
-        
+
         tokio::spawn(actor.run(cmd_rx));
-        
-        MeetHandle {
-            cmd_tx,
-            relay_tx,
-        }
+
+        MeetHandle { cmd_tx, relay_tx }
     }
 
     pub async fn apply_updates(
@@ -61,44 +59,57 @@ impl MeetHandle {
         updates: Vec<Update>,
     ) -> Result<Vec<(u64, u64)>, AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-        
+
         self.cmd_tx.send(ActorMsg::Update {
             client_id,
             priority,
             updates,
             resp_tx,
         })?;
-        
-        resp_rx.recv().await.ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+
+        resp_rx
+            .recv()
+            .await
+            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
     }
 
-    pub async fn get_updates_since(&self, since: u64) -> Result<Vec<UpdateWithServerSeq>, AppError> {
+    pub async fn get_updates_since(
+        &self,
+        since: u64,
+    ) -> Result<Vec<UpdateWithServerSeq>, AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-        
-        self.cmd_tx.send(ActorMsg::Pull {
-            since,
-            resp_tx,
-        })?;
-        
-        resp_rx.recv().await.ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+
+        self.cmd_tx.send(ActorMsg::Pull { since, resp_tx })?;
+
+        resp_rx
+            .recv()
+            .await
+            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
     }
 
-    pub async fn store_csv_data(&self, opl_csv: String, return_email: String) -> Result<(), AppError> {
+    pub async fn store_csv_data(
+        &self,
+        opl_csv: String,
+        return_email: String,
+    ) -> Result<(), AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-        
+
         self.cmd_tx.send(ActorMsg::StoreCsv {
             opl_csv,
             return_email,
             resp_tx,
         })?;
-        
-        resp_rx.recv().await.ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+
+        resp_rx
+            .recv()
+            .await
+            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
     }
 }
 
-pub struct MeetActor {
+pub struct MeetActor<S: Storage> {
     meet_id: String,
-    storage: Box<dyn Storage + Send + Sync>,
+    storage: S,
     state: Value,
     updates: Vec<UpdateWithServerSeq>,
     server_seq: u64,
@@ -106,15 +117,15 @@ pub struct MeetActor {
     tx_relay: broadcast::Sender<UpdateWithServerSeq>,
 }
 
-impl MeetActor {
+impl<S: Storage> MeetActor<S> {
     pub fn new(
         meet_id: String,
-        storage: impl Storage + 'static,
+        storage: S,
         tx_relay: broadcast::Sender<UpdateWithServerSeq>,
     ) -> Self {
-        MeetActor {
+        Self {
             meet_id,
-            storage: Box::new(storage),
+            storage,
             state: serde_json::json!({}),
             updates: Vec::new(),
             server_seq: 0,
@@ -130,45 +141,50 @@ impl MeetActor {
         updates: Vec<Update>,
     ) -> Result<Vec<(u64, u64)>, AppError> {
         let mut results = Vec::new();
-        
+
         let updates_len = updates.len();
         for update in updates {
             self.server_seq += 1;
             let seq = self.server_seq;
-            
+
             let update_with_seq = UpdateWithServerSeq {
                 update: update.clone(),
                 server_seq_num: seq,
             };
-            
+
             // Apply the update to our state
             self.apply_update(&update_with_seq);
-            
+
             // Store in our map of updates by key
-            self.updates_by_key.insert(update.update_key.clone(), update_with_seq.clone());
-            
+            self.updates_by_key
+                .insert(update.update_key.clone(), update_with_seq.clone());
+
             // Add to our list of updates
             self.updates.push(update_with_seq.clone());
-            
+
             // Store in persistent storage
             let json = serde_json::to_string(&update_with_seq)?;
             self.storage.append_update(&self.meet_id, &json).await?;
-            
+
             // Broadcast to all connected clients
             let _ = self.tx_relay.send(update_with_seq);
-            
+
             results.push((seq, seq));
         }
-        
+
         // Update metrics
         let _ = counter!("meet.updates", &[("value", "1")]);
-        let _ = histogram!("meet.update.batch_size", &[("value", updates_len.to_string())]);
-        
+        let _ = histogram!(
+            "meet.update.batch_size",
+            &[("value", updates_len.to_string())]
+        );
+
         Ok(results)
     }
 
     pub fn get_updates_since(&self, since: u64) -> Vec<UpdateWithServerSeq> {
-        self.updates.iter()
+        self.updates
+            .iter()
             .filter(|u| u.server_seq_num > since)
             .cloned()
             .collect()
@@ -178,7 +194,10 @@ impl MeetActor {
         // Apply the update to our state
         // This is a simplified version - in a real app, you'd have more complex state management
         if let Some(obj) = self.state.as_object_mut() {
-            obj.insert(update.update.update_key.clone(), update.update.update_value.clone());
+            obj.insert(
+                update.update.update_key.clone(),
+                update.update.update_value.clone(),
+            );
         } else {
             self.state = serde_json::json!({
                 update.update.update_key.clone(): update.update.update_value.clone()
@@ -193,58 +212,70 @@ impl MeetActor {
     pub async fn run(mut self, mut rx: mpsc::UnboundedReceiver<ActorMsg>) {
         while let Some(msg) = rx.recv().await {
             match msg {
-                ActorMsg::Update { client_id, priority, updates, resp_tx } => {
+                ActorMsg::Update {
+                    client_id,
+                    priority,
+                    updates,
+                    resp_tx,
+                } => {
                     let result = self.handle_update(client_id, priority, updates).await;
                     let _ = resp_tx.send(result);
-                }
+                },
                 ActorMsg::Pull { since, resp_tx } => {
                     let updates = self.get_updates_since(since);
                     let _ = resp_tx.send(Ok(updates));
-                }
-                ActorMsg::StoreCsv { opl_csv, return_email, resp_tx } => {
+                },
+                ActorMsg::StoreCsv {
+                    opl_csv,
+                    return_email,
+                    resp_tx,
+                } => {
                     let result = self.store_csv_data(opl_csv, return_email).await;
                     let _ = resp_tx.send(result);
-                }
+                },
             }
         }
     }
 
-    pub async fn store_csv_data(&self, opl_csv: String, return_email: String) -> Result<(), AppError> {
+    pub async fn store_csv_data(
+        &self,
+        opl_csv: String,
+        return_email: String,
+    ) -> Result<(), AppError> {
         // Store CSV data
-        self.storage.store_meet_csv(&self.meet_id, &opl_csv, &return_email).await?;
-        
+        self.storage
+            .store_meet_csv(&self.meet_id, &opl_csv, &return_email)
+            .await?;
+
         // Update metrics
         let _ = counter!("meet.published", &[("value", "1")]);
         let _ = histogram!("meet.csv_size", &[("value", opl_csv.len().to_string())]);
-        
+
         Ok(())
     }
 }
 
 /// Spawn a new meet actor and return its handle
-pub async fn spawn_meet_actor(
-    meet_id: &str,
-    storage: impl Storage + 'static,
-) -> MeetHandle {
+pub async fn spawn_meet_actor(meet_id: &str, storage: impl Storage + 'static) -> MeetHandle {
     let (cmd_tx, rx_cmd) = mpsc::unbounded_channel();
     let (relay_tx, _) = broadcast::channel(32);
     let actor = MeetActor::new(meet_id.to_string(), storage, relay_tx.clone());
-    
-    tokio::spawn(async move { 
-        actor.run(rx_cmd).await; 
+
+    tokio::spawn(async move {
+        actor.run(rx_cmd).await;
     });
-    
+
     MeetHandle { cmd_tx, relay_tx }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio;
-    use tempfile::TempDir;
     use crate::storage::FlatFileStorage;
+    use tempfile::TempDir;
+    use tokio;
 
-    async fn setup() -> (MeetActor, TempDir) {
+    fn setup() -> (MeetActor<FlatFileStorage>, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
         let (relay_tx, _) = broadcast::channel(100);
@@ -254,7 +285,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_update() {
-        let (mut actor, _temp_dir) = setup().await;
+        let (mut actor, _temp_dir) = setup();
         let client_id = "client1".to_string();
         let priority = 1;
         let updates = vec![Update {
@@ -264,7 +295,10 @@ mod tests {
             after_server_seq_num: 0,
         }];
 
-        let result = actor.handle_update(client_id, priority, updates).await.unwrap();
+        let result = actor
+            .handle_update(client_id, priority, updates)
+            .await
+            .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, 1); // server_seq
         assert_eq!(result[0].1, 1); // local_seq
@@ -272,8 +306,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_updates_since() {
-        let (mut actor, _temp_dir) = setup().await;
-        
+        let (mut actor, _temp_dir) = setup();
+
         // Add some updates
         let updates = vec![
             Update {
@@ -290,7 +324,10 @@ mod tests {
             },
         ];
 
-        actor.handle_update("client1".to_string(), 1, updates).await.unwrap();
+        actor
+            .handle_update("client1".to_string(), 1, updates)
+            .await
+            .unwrap();
 
         // Get updates since seq 1
         let updates = actor.get_updates_since(1);
@@ -300,8 +337,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_apply_update() {
-        let (mut actor, _temp_dir) = setup().await;
-        
+        let (mut actor, _temp_dir) = setup();
+
         let update = UpdateWithServerSeq {
             update: Update {
                 update_key: "test.key".to_string(),
@@ -313,7 +350,7 @@ mod tests {
         };
 
         actor.apply_update(&update);
-        
+
         let state = actor.get_state();
         assert_eq!(state["test.key"], "value");
     }
@@ -325,9 +362,12 @@ mod tests {
         let handle = MeetHandle::new("test-meet".to_string());
 
         // Verify channels are created
-        assert!(handle.cmd_tx.send(ActorMsg::Pull {
-            since: 0,
-            resp_tx: mpsc::unbounded_channel().0,
-        }).is_ok());
+        assert!(handle
+            .cmd_tx
+            .send(ActorMsg::Pull {
+                since: 0,
+                resp_tx: mpsc::unbounded_channel().0,
+            })
+            .is_ok());
     }
-} 
+}

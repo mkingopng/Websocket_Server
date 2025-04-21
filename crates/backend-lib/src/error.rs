@@ -3,8 +3,8 @@
 // ============================
 //! Central error type + Axum integration.
 use axum::{
-    response::{IntoResponse, Response},
     http::StatusCode,
+    response::{IntoResponse, Response},
 };
 use thiserror::Error;
 
@@ -76,7 +76,7 @@ impl IntoResponse for AppError {
         let status = self.status_code();
         let error_code = self.error_code();
         let message = self.to_string();
-        
+
         // Create a JSON response with error details
         let body = serde_json::json!({
             "error": {
@@ -84,7 +84,7 @@ impl IntoResponse for AppError {
                 "message": message,
             }
         });
-        
+
         (status, axum::Json(body)).into_response()
     }
 }
@@ -105,4 +105,4 @@ impl From<&str> for AppError {
     fn from(msg: &str) -> Self {
         AppError::Internal(msg.to_string())
     }
-} 
+}

@@ -1,7 +1,7 @@
 // common/src/lib.rs
 //! Common types and structures
 //! used for communication between the `OpenLifter` client and server.
-//! 
+//!
 //! This module defines the WebSocket protocol messages and supporting types.
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ pub type Seq = u64;
 #[serde(tag = "msgType")]
 pub enum ClientToServer {
     /// Create a new meet
-    /// 
+    ///
     /// # Fields
     /// * `this_location_name` - Name of the creating location
     /// * `password` - Meet password (min 10 chars)
@@ -25,7 +25,7 @@ pub enum ClientToServer {
         endpoints: Vec<EndpointPriority>,
     },
     /// Join an existing meet
-    /// 
+    ///
     /// # Fields
     /// * `meet_id` - ID of the meet to join
     /// * `password` - Meet password
@@ -36,7 +36,7 @@ pub enum ClientToServer {
         location_name: String,
     },
     /// Initialize updates from a client
-    /// 
+    ///
     /// # Fields
     /// * `session_token` - Client's session token
     /// * `updates` - List of updates to apply
@@ -45,7 +45,7 @@ pub enum ClientToServer {
         updates: Vec<Update>,
     },
     /// Request updates since a specific sequence number
-    /// 
+    ///
     /// # Fields
     /// * `session_token` - Client's session token
     /// * `last_server_seq` - Last server sequence number seen by client
@@ -54,7 +54,7 @@ pub enum ClientToServer {
         last_server_seq: Seq,
     },
     /// Publish meet results to OPL
-    /// 
+    ///
     /// # Fields
     /// * `session_token` - Client's session token
     /// * `return_email` - Email to send results to
@@ -104,60 +104,60 @@ pub struct UpdateWithServerSeq {
 #[serde(tag = "msgType")]
 pub enum ServerToClient {
     /// Response to successful meet creation
-    MeetCreated { 
+    MeetCreated {
         /// Generated meet ID
-        meet_id: String, 
+        meet_id: String,
         /// Session token for the creating client
-        session_token: String 
+        session_token: String,
     },
     /// Response to successful meet join
-    MeetJoined { 
+    MeetJoined {
         /// Session token for the joining client
-        session_token: String 
+        session_token: String,
     },
     /// Response to failed meet join
-    JoinRejected { 
+    JoinRejected {
         /// Reason for rejection
-        reason: String 
+        reason: String,
     },
     /// Acknowledgment of updates
-    UpdateAck { 
+    UpdateAck {
         /// List of (`local_seq`, `server_seq`) pairs
-        update_acks: Vec<(Seq, Seq)> 
+        update_acks: Vec<(Seq, Seq)>,
     },
     /// Rejection of updates
-    UpdateRejected { 
+    UpdateRejected {
         /// List of rejected updates with reasons
-        updates_rejected: Vec<(Seq, String)> 
+        updates_rejected: Vec<(Seq, String)>,
     },
     /// Relay of updates to other clients
-    UpdateRelay { 
+    UpdateRelay {
         /// List of updates to apply
-        updates_relayed: Vec<UpdateWithServerSeq> 
+        updates_relayed: Vec<UpdateWithServerSeq>,
     },
     /// Response to client pull request
-    ServerPull { 
+    ServerPull {
         /// Current server sequence number
-        last_server_seq: Seq, 
+        last_server_seq: Seq,
         /// Updates since client's last seen sequence
-        updates_relayed: Vec<UpdateWithServerSeq> 
+        updates_relayed: Vec<UpdateWithServerSeq>,
     },
     /// Acknowledgment of meet publication
     PublishAck,
     /// Error response for malformed messages
-    MalformedMessage { 
+    MalformedMessage {
         /// Error description
-        err_msg: String 
+        err_msg: String,
     },
     /// Error response for unknown message types
-    UnknownMessageType { 
+    UnknownMessageType {
         /// The unknown message type
-        msg_type: String 
+        msg_type: String,
     },
     /// Error response for invalid sessions
-    InvalidSession { 
+    InvalidSession {
         /// The invalid session token
-        session_token: String 
+        session_token: String,
     },
 }
 
