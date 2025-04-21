@@ -14,3 +14,4 @@ axum = { workspace = true }
 metrics-exporter-prometheus = "0.12"
 config = "0.13" 
 hyper.workspace = true
+futures-util.workspace = true
