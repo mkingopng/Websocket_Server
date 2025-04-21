@@ -23,45 +23,80 @@ pub async fn rate_limit<S: Storage + Send + Sync + 'static>(
         .and_then(|h| h.to_str().ok())
         .unwrap_or("unknown");
 
-    // Get rate limit settings
-    let settings = state.settings.get();
-    let max_requests = settings.rate_limit.max_requests;
-    let window_secs = settings.rate_limit.window_secs;
-
-    // Get or create rate limit entry
-    let mut entry = state.rate_limits.entry(client_ip.to_string()).or_insert_with(|| {
-        RateLimitEntry {
-            requests: 0,
-            window_start: Instant::now(),
-        }
-    });
-
-    // Check if window has expired
-    if entry.window_start.elapsed() > Duration::from_secs(window_secs) {
-        entry.requests = 0;
-        entry.window_start = Instant::now();
-    }
-
-    // Check if rate limit exceeded
-    if entry.requests >= max_requests {
+    // Check rate limit
+    if !state.rate_limiter.check_rate_limit(client_ip) {
         return Err(AppError::RateLimitExceeded);
     }
-
-    // Increment request count
-    entry.requests += 1;
 
     // Continue to next middleware/handler
     Ok(next.run(request).await)
 }
 
 /// Rate limit entry for a client
-#[derive(Debug)]
 pub struct RateLimitEntry {
-    requests: u32,
-    window_start: Instant,
+    pub last_request: Instant,
+    pub count: u32,
 }
 
-/// Add rate limiter to `AppState`
-pub fn add_rate_limiter<S: Storage + Send + Sync + 'static>(state: &mut AppState<S>) {
-    state.rate_limits = Arc::new(DashMap::new());
+pub struct RateLimiter {
+    entries: Arc<DashMap<String, RateLimitEntry>>,
+    window: Duration,
+    max_requests: u32,
+}
+
+impl RateLimiter {
+    pub fn new(window: Duration, max_requests: u32) -> Self {
+        Self {
+            entries: Arc::new(DashMap::new()),
+            window,
+            max_requests,
+        }
+    }
+
+    pub fn check_rate_limit(&self, client_ip: &str) -> bool {
+        let now = Instant::now();
+        let mut entry = self.entries.entry(client_ip.to_string()).or_insert_with(|| {
+            RateLimitEntry {
+                last_request: now,
+                count: 0,
+            }
+        });
+
+        if now.duration_since(entry.last_request) > self.window {
+            entry.count = 1;
+            entry.last_request = now;
+            true
+        } else {
+            entry.count += 1;
+            if entry.count > self.max_requests {
+                false
+            } else {
+                true
+            }
+        }
+    }
+
+    pub fn clear_expired(&self) {
+        let now = Instant::now();
+        self.entries.retain(|_, entry| {
+            now.duration_since(entry.last_request) <= self.window
+        });
+    }
+}
+
+pub async fn check_rate_limit<S: Storage + Send + Sync + 'static>(
+    state: &Arc<AppState<S>>,
+    client_ip: &str,
+) -> Result<(), AppError> {
+    if !state.rate_limiter.check_rate_limit(client_ip) {
+        return Err(AppError::RateLimitExceeded);
+    }
+    Ok(())
+}
+
+pub fn init_rate_limiter<S: Storage + Send + Sync + 'static>(state: &mut AppState<S>) {
+    state.rate_limiter = Arc::new(RateLimiter::new(
+        Duration::from_secs(60),
+        100,
+    ));
 } 

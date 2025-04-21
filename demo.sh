@@ -33,22 +33,14 @@ fi
 echo -e "${GREEN}Server started successfully!${NC}"
 echo "Server is running on ws://127.0.0.1:3000/ws"
 
-# Create a test message file
-cat > test_message.json << EOF
-{
-  "type": "CreateMeet",
-  "payload": {
-    "meet_id": "demo-meet-123",
-    "password": "TestPassword123!"
-  }
-}
-EOF
+# Create a test message as a single line
+TEST_MESSAGE='{"type":"CreateMeet","payload":{"meet_id":"demo-meet-123","password":"TestPassword123!"}}'
 
 echo -e "${YELLOW}Connecting to WebSocket server with websocat...${NC}"
 echo "Sending test message to create a meet..."
 
-# Connect to the server and send the test message
-websocat ws://127.0.0.1:3000/ws --ping-interval 5 < test_message.json &
+# Use echo to pipe the message to websocat
+echo $TEST_MESSAGE | websocat ws://127.0.0.1:3000/ws --ping-interval 5 &
 WEBSOCAT_PID=$!
 
 # Wait for a response
@@ -59,7 +51,6 @@ sleep 5
 echo -e "${YELLOW}Cleaning up...${NC}"
 kill $WEBSOCAT_PID 2>/dev/null
 kill $SERVER_PID 2>/dev/null
-rm test_message.json
 
 echo -e "${GREEN}Demonstration completed!${NC}"
 echo "To test manually, run: websocat ws://127.0.0.1:3000/ws" 

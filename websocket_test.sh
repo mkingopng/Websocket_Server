@@ -59,8 +59,8 @@ cat > join_meet.json << EOF
 }
 EOF
 
-# Send an update
-cat > send_update.json << EOF
+# Send an update (template - session token will be filled in later)
+cat > update_template.json << EOF
 {
   "type": "UpdateInit",
   "payload": {
@@ -87,19 +87,19 @@ WEBSOCAT_PID1=$!
 
 # Wait for a response
 echo "Waiting for server response..."
-sleep 3
+sleep 2
 
 # Display the response
 echo -e "${GREEN}Server response:${NC}"
 cat create_response.json
 echo ""
 
-# Extract session token from response (this is a simplified example)
-SESSION_TOKEN=$(grep -o '"session_token":"[^"]*"' create_response.json | cut -d'"' -f4)
+# Extract session token from response
+SESSION_TOKEN=$(jq -r '.payload.session_token' create_response.json)
 echo -e "${BLUE}Session token: ${SESSION_TOKEN}${NC}"
 
-# Update the send_update.json with the session token
-sed -i "s/REPLACE_WITH_TOKEN/${SESSION_TOKEN}/g" send_update.json
+# Create the update message with the session token
+jq --arg token "$SESSION_TOKEN" '.payload.session_token = $token' update_template.json > send_update.json
 
 # Test 2: Join the meet
 echo -e "${YELLOW}Test 2: Joining the meet...${NC}"
@@ -111,7 +111,7 @@ WEBSOCAT_PID2=$!
 
 # Wait for a response
 echo "Waiting for server response..."
-sleep 3
+sleep 2
 
 # Display the response
 echo -e "${GREEN}Server response:${NC}"
@@ -128,7 +128,7 @@ WEBSOCAT_PID3=$!
 
 # Wait for a response
 echo "Waiting for server response..."
-sleep 3
+sleep 2
 
 # Display the response
 echo -e "${GREEN}Server response:${NC}"
@@ -141,7 +141,7 @@ kill $WEBSOCAT_PID1 2>/dev/null
 kill $WEBSOCAT_PID2 2>/dev/null
 kill $WEBSOCAT_PID3 2>/dev/null
 kill $SERVER_PID 2>/dev/null
-rm create_meet.json join_meet.json send_update.json create_response.json join_response.json update_response.json
+rm create_meet.json join_meet.json send_update.json update_template.json create_response.json join_response.json update_response.json
 
 echo -e "${GREEN}Comprehensive test completed!${NC}"
 echo "To test manually, run: websocat ws://127.0.0.1:3000/ws" 

@@ -10,4 +10,15 @@ data_dir = "data"
 
 # Metrics configuration
 enable_metrics = false
-metrics_port = 9091 
+metrics_port = 9091
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[storage]
+path = "data"
+
+[rate_limit]
+window_secs = 60
+max_requests = 100 

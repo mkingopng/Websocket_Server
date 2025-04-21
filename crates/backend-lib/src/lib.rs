@@ -3,57 +3,57 @@
 // ============================
 //! Core backend-lib functionality for the `OpenLifter` WebSocket server.
 
-pub mod auth;
-pub mod error;
-pub mod meet;
-pub mod meet_actor;
-pub mod storage;
-pub mod ws_router;
 pub mod config;
+pub mod storage;
+pub mod messages;
+pub mod auth;
+pub mod meet;
+pub mod error;
 pub mod metrics;
 pub mod middleware;
-pub mod handlers;
+pub mod ws_router;
+pub mod meet_actor;
+pub mod websocket;
 
 use std::sync::Arc;
-use dashmap::DashMap;
+use std::error::Error;
 use crate::auth::{AuthService, DefaultAuth, SessionManager};
-use crate::meet::MeetManager;
-use crate::storage::{Storage, FlatFileStorage};
-use crate::config::{Settings, SettingsManager};
+use crate::config::Settings;
+use crate::storage::FlatFileStorage;
+use crate::middleware::rate_limit::RateLimiter;
 
 /// Application state shared across all handlers
 #[derive(Clone)]
-pub struct AppState<S: Storage + Send + Sync + 'static> {
-    /// Manager for all active meets
-    pub meets: Arc<MeetManager>,
+pub struct AppState<S> {
     /// Authentication service
-    pub auth_srv: Arc<dyn AuthService>,
-    /// Storage backend
-    pub storage: Arc<S>,
+    pub auth: Arc<dyn AuthService>,
+    /// Session manager
+    pub sessions: Arc<SessionManager>,
     /// Settings manager
-    pub settings: Arc<SettingsManager>,
-    /// Rate limiters
-    pub rate_limits: Arc<DashMap<String, middleware::rate_limit::RateLimitEntry>>,
+    pub settings: Arc<Settings>,
+    /// Storage backend
+    pub storage: S,
+    /// Rate limiter
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
-impl<S: Storage + Send + Sync + 'static> AppState<S> {
+impl<S> AppState<S> {
     /// Create a new application state
-    pub fn new(
-        storage: S,
-        settings: Settings,
-    ) -> Result<Self, anyhow::Error> {
-        let session_manager = SessionManager::new();
-        let auth_srv: Arc<dyn AuthService> = Arc::new(DefaultAuth::new(session_manager));
-        let meets = Arc::new(MeetManager::new());
-        let settings = Arc::new(SettingsManager::new(settings)?);
-        let rate_limits = Arc::new(DashMap::new());
+    pub fn new(storage: S, config: Settings) -> Result<Self, Box<dyn Error>> {
+        let sessions = Arc::new(SessionManager::new());
+        let auth = Arc::new(DefaultAuth::new((*sessions).clone()));
+        let settings = Arc::new(config.clone());
+        let rate_limiter = Arc::new(RateLimiter::new(
+            std::time::Duration::from_secs(60),
+            100,
+        ));
         
-        Ok(AppState {
-            storage: Arc::new(storage),
-            auth_srv,
-            meets,
-            rate_limits,
+        Ok(Self {
+            auth,
+            sessions,
             settings,
+            storage,
+            rate_limiter,
         })
     }
     
@@ -63,7 +63,7 @@ impl<S: Storage + Send + Sync + 'static> AppState<S> {
         S: From<FlatFileStorage>,
     {
         let storage = S::from(FlatFileStorage::new("data")?);
-        let settings = config::load_settings()?;
-        Self::new(storage, settings)
+        let settings = Settings::load()?;
+        Self::new(storage, settings).map_err(|e| anyhow::anyhow!("{}", e))
     }
 } 

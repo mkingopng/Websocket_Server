@@ -1,34 +1,29 @@
-use super::{AuthService, PasswordRequirements, Session, SessionManager};
-use super::password::{hash_password, verify_password, validate_password_strength};
 use async_trait::async_trait;
+use crate::auth::{AuthService, SessionManager};
+use crate::messages::Session;
 
 pub struct DefaultAuth {
     sm: SessionManager,
 }
 
 impl DefaultAuth {
-    pub fn new(sm: SessionManager) -> Self { Self { sm } }
+    pub fn new(sm: SessionManager) -> Self {
+        Self { sm }
+    }
 }
 
 #[async_trait]
 impl AuthService for DefaultAuth {
-    async fn hash_password(&self, p: &str) -> anyhow::Result<String> { 
-        hash_password(p) 
+    async fn new_session(&self, meet_id: String, _location_name: String, _priority: u8) -> String {
+        let session = self.sm.create_session(meet_id).await;
+        session.token
     }
-    
-    fn verify_password(&self, h: &str, p: &str) -> bool { 
-        verify_password(h, p) 
-    }
-    
-    fn password_ok(&self, pwd: &str, req: &PasswordRequirements) -> bool {
-        validate_password_strength(pwd, req)
-    }
-    
-    async fn new_session(&self, meet_id: String, location_name: String, priority: u8) -> String {
-        self.sm.new_session(meet_id, location_name, priority)
-    }
-    
+
     async fn get_session(&self, token: &str) -> Option<Session> {
-        self.sm.get_session(token)
+        self.sm.get_session(token).await
+    }
+
+    async fn validate_session(&self, token: &str) -> bool {
+        self.sm.validate_session(token).await
     }
 } 

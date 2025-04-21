@@ -4,23 +4,16 @@
 //! Session token handling and management.
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
-use parking_lot::RwLock;
-use uuid::Uuid;
+use tokio::sync::RwLock;
+use async_trait::async_trait;
+use crate::messages::Session;
+use super::AuthService;
 
 /// Session TTL (time to live)
-pub const SESSION_TTL: Duration = Duration::from_secs(60 * 60 * 24 * 7); // 7 days
-
-/// Session information
-#[derive(Clone)]
-pub struct Session {
-    pub meet_id: String,
-    pub location_name: String,
-    pub priority: u8,
-}
+pub const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600); // 1 hour
 
 /// Session manager for handling authentication tokens
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SessionManager {
     sessions: Arc<RwLock<HashMap<String, Session>>>,
 }
@@ -34,39 +27,54 @@ impl Default for SessionManager {
 impl SessionManager {
     /// Create a new session manager
     pub fn new() -> Self {
-        SessionManager {
+        Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Create a new session
-    pub fn new_session(&self, meet_id: String, location_name: String, priority: u8) -> String {
-        let token = Uuid::new_v4().to_string();
-        let session = Session {
-            meet_id,
-            location_name,
-            priority,
-        };
-        let mut sessions = self.sessions.write();
-        sessions.insert(token.clone(), session);
-        token
+    pub async fn create_session(&self, meet_id: String) -> Session {
+        let session = Session::new(meet_id);
+        let token = session.token.clone();
+        self.sessions.write().await.insert(token, session.clone());
+        session
     }
 
     /// Get a session by token
-    pub fn get_session(&self, token: &str) -> Option<Session> {
-        let sessions = self.sessions.read();
-        sessions.get(token).cloned()
+    pub async fn get_session(&self, token: &str) -> Option<Session> {
+        self.sessions.read().await.get(token).cloned()
     }
 
-    /// Validate a session token
-    pub fn validate_session(&self, token: &str) -> bool {
-        let sessions = self.sessions.read();
-        sessions.contains_key(token)
+    /// Validate a session by token
+    pub async fn validate_session(&self, token: &str) -> bool {
+        self.sessions.read().await.contains_key(token)
     }
-    
+
+    /// Remove a session by token
+    pub async fn remove_session(&self, token: &str) {
+        self.sessions.write().await.remove(token);
+    }
+
     /// Cleanup task that runs periodically to remove expired sessions
-    pub fn cleanup_expired_sessions(&self) {
-        let mut sessions = self.sessions.write();
-        sessions.retain(|_, _| true); // TODO: Implement actual expiration logic
+    pub async fn cleanup_expired_sessions(&self) {
+        // TODO: Implement session expiration
+        let mut sessions = self.sessions.write().await;
+        sessions.retain(|_, _| true);
+    }
+}
+
+#[async_trait]
+impl AuthService for SessionManager {
+    async fn new_session(&self, meet_id: String, _location_name: String, _priority: u8) -> String {
+        let session = self.create_session(meet_id).await;
+        session.token
+    }
+
+    async fn get_session(&self, token: &str) -> Option<Session> {
+        self.get_session(token).await
+    }
+
+    async fn validate_session(&self, token: &str) -> bool {
+        self.validate_session(token).await
     }
 } 
