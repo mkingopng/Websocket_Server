@@ -210,3 +210,238 @@ pub fn validate_client_message(message: &ClientMessage) -> ValidationResult<()> 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::messages::{ClientMessage, Update};
+
+    #[test]
+    fn test_validate_meet_id() {
+        // Valid meet ID
+        assert!(validate_meet_id("valid-meet-id").is_ok());
+
+        // Empty meet ID
+        assert!(matches!(
+            validate_meet_id(""),
+            Err(ValidationError::InvalidMeetId(_))
+        ));
+
+        // Too long meet ID
+        let long_id = "a".repeat(51);
+        assert!(matches!(
+            validate_meet_id(&long_id),
+            Err(ValidationError::InvalidMeetId(_))
+        ));
+
+        // Meet ID with invalid characters
+        assert!(matches!(
+            validate_meet_id("invalid@meet"),
+            Err(ValidationError::InvalidMeetId(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_password() {
+        // Valid password
+        assert!(validate_password("Password123!").is_ok());
+
+        // Too short password
+        assert!(matches!(
+            validate_password("Short1"),
+            Err(ValidationError::InvalidPassword(_))
+        ));
+
+        // Password without uppercase
+        assert!(matches!(
+            validate_password("password123!"),
+            Err(ValidationError::InvalidPassword(_))
+        ));
+
+        // Password without lowercase
+        assert!(matches!(
+            validate_password("PASSWORD123!"),
+            Err(ValidationError::InvalidPassword(_))
+        ));
+
+        // Password without digits
+        assert!(matches!(
+            validate_password("PasswordABC!"),
+            Err(ValidationError::InvalidPassword(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_location_name() {
+        // Valid location name
+        assert!(validate_location_name("Test Location").is_ok());
+
+        // Empty location name
+        assert!(matches!(
+            validate_location_name(""),
+            Err(ValidationError::InvalidLocationName(_))
+        ));
+
+        // Too long location name
+        let long_name = "a".repeat(101);
+        assert!(matches!(
+            validate_location_name(&long_name),
+            Err(ValidationError::InvalidLocationName(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_session_token() {
+        // Valid session token
+        assert!(validate_session_token("valid-token").is_ok());
+
+        // Empty session token
+        assert!(matches!(
+            validate_session_token(""),
+            Err(ValidationError::InvalidSessionToken(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_email() {
+        // Valid email
+        assert!(validate_email("test@example.com").is_ok());
+
+        // Invalid email (no @)
+        assert!(matches!(
+            validate_email("test.example.com"),
+            Err(ValidationError::InvalidEmail(_))
+        ));
+
+        // Invalid email (no domain)
+        assert!(matches!(
+            validate_email("test@"),
+            Err(ValidationError::InvalidEmail(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_update() {
+        let valid_update = Update {
+            location: "some.location".to_string(),
+            value: "{}".to_string(),
+            timestamp: 12345,
+        };
+        assert!(validate_update(&valid_update).is_ok());
+
+        let invalid_location = Update {
+            location: String::new(), // Empty location
+            value: "{}".to_string(),
+            timestamp: 12345,
+        };
+        assert!(validate_update(&invalid_location).is_err());
+
+        // We were testing invalid JSON, but the current implementation doesn't validate the JSON format
+        // Let's test invalid timestamp instead
+        let invalid_timestamp = Update {
+            location: "some.location".to_string(),
+            value: "not json".to_string(),
+            timestamp: 0, // Invalid timestamp (must be positive)
+        };
+        assert!(validate_update(&invalid_timestamp).is_err());
+    }
+
+    #[test]
+    fn test_validate_client_message_create_meet() {
+        let valid_msg = ClientMessage::CreateMeet {
+            meet_id: "valid-meet".to_string(),
+            password: "Password123!".to_string(),
+            location_name: "Valid Location".to_string(),
+            priority: 5,
+        };
+        assert!(validate_client_message(&valid_msg).is_ok());
+
+        let invalid_msg = ClientMessage::CreateMeet {
+            meet_id: String::new(),        // Invalid meet ID
+            password: "short".to_string(), // Invalid password
+            location_name: String::new(),  // Invalid location name
+            priority: 5,
+        };
+        assert!(validate_client_message(&invalid_msg).is_err());
+    }
+
+    #[test]
+    fn test_validate_client_message_join_meet() {
+        let valid_msg = ClientMessage::JoinMeet {
+            meet_id: "valid-meet".to_string(),
+            password: "Password123!".to_string(),
+            location_name: "Valid Location".to_string(),
+            priority: 5,
+        };
+        assert!(validate_client_message(&valid_msg).is_ok());
+
+        let invalid_msg = ClientMessage::JoinMeet {
+            meet_id: String::new(),        // Invalid meet ID
+            password: "short".to_string(), // Invalid password
+            location_name: String::new(),  // Still allowed, but test invalid meet ID
+            priority: 5,
+        };
+        assert!(validate_client_message(&invalid_msg).is_err());
+    }
+
+    #[test]
+    fn test_validate_client_message_update_init() {
+        let valid_msg = ClientMessage::UpdateInit {
+            meet_id: "valid-meet".to_string(),
+            session_token: "valid-token".to_string(),
+            updates: vec![Update {
+                location: "valid.location".to_string(),
+                value: "{}".to_string(),
+                timestamp: 123,
+            }],
+        };
+        assert!(validate_client_message(&valid_msg).is_ok());
+
+        let invalid_msg = ClientMessage::UpdateInit {
+            meet_id: String::new(),       // Invalid meet ID
+            session_token: String::new(), // Invalid session token
+            updates: vec![Update {
+                location: String::new(), // Invalid update location
+                value: "not json".to_string(),
+                timestamp: 123,
+            }],
+        };
+        assert!(validate_client_message(&invalid_msg).is_err());
+    }
+
+    #[test]
+    fn test_validate_client_message_client_pull() {
+        let valid_msg = ClientMessage::ClientPull {
+            meet_id: "valid-meet".to_string(),
+            session_token: "valid-token".to_string(),
+            last_server_seq: 10,
+        };
+        assert!(validate_client_message(&valid_msg).is_ok());
+
+        let invalid_msg = ClientMessage::ClientPull {
+            meet_id: String::new(),       // Invalid meet ID
+            session_token: String::new(), // Invalid session token
+            last_server_seq: 10,
+        };
+        assert!(validate_client_message(&invalid_msg).is_err());
+    }
+
+    #[test]
+    fn test_validate_client_message_publish_meet() {
+        let valid_msg = ClientMessage::PublishMeet {
+            meet_id: "valid-meet".to_string(),
+            session_token: "valid-token".to_string(),
+            return_email: "test@example.com".to_string(),
+            opl_csv: "valid,csv,data".to_string(),
+        };
+        assert!(validate_client_message(&valid_msg).is_ok());
+
+        let invalid_msg = ClientMessage::PublishMeet {
+            meet_id: String::new(),                    // Invalid meet ID
+            session_token: String::new(),              // Invalid session token
+            return_email: "invalid-email".to_string(), // Invalid email
+            opl_csv: String::new(),                    // Invalid CSV
+        };
+        assert!(validate_client_message(&invalid_msg).is_err());
+    }
+}

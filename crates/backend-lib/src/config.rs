@@ -142,6 +142,21 @@ fn default_rate_limit() -> RateLimitSettings {
     }
 }
 
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            server: ServerSettings {
+                port: 8080,
+                host: "127.0.0.1".to_string(),
+            },
+            storage: StorageSettings {
+                path: PathBuf::from("data"),
+            },
+            rate_limit: default_rate_limit(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

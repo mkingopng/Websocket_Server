@@ -44,8 +44,11 @@ Besides the unit tests that run automatically in the pre-commit hook, we have ad
 
 1. Make changes to the codebase
 2. Run tests locally: `cargo test --all`
-3. Commit your changes (the pre-commit hook will verify code quality)
-4. Submit a pull request
+3. run `cargo fmt` and `cargo clippy` to ensure code quality
+4. run `cargo check` to ensure the code compiles
+5. run e2e tests
+6. Commit your changes and run the pre-commit hook
+7. Submit a pull request
 
 ## Coding Standards
 
