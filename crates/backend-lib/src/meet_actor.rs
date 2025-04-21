@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use tokio::sync::{mpsc, broadcast};
 use openlifter_common::{Update, UpdateWithServerSeq};
-use crate::{storage::Storage, error::AppError, storage::FlatFileStorage};
+use crate::{storage::Storage, error::AppError};
 use uuid::Uuid;
 use serde_json::Value;
 use metrics::{counter, histogram};
