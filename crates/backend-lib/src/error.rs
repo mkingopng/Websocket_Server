@@ -7,7 +7,6 @@ use axum::{
     http::StatusCode,
 };
 use thiserror::Error;
-use std::fmt;
 
 /// Application error types with error codes and context
 #[derive(Error, Debug)]

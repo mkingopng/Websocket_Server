@@ -7,9 +7,8 @@ use axum::{
 use backend_lib::{AppState, config::Settings, storage::FlatFileStorage};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use futures_util::{SinkExt};
 
-async fn handle_socket(mut socket: WebSocket, state: State<AppState>) {
+async fn handle_socket(mut socket: WebSocket, _state: State<AppState>) {
     println!("New WebSocket connection established");
     
     // Echo any messages received

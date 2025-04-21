@@ -2,7 +2,6 @@
 // openlifter-backend-lib/src/auth/session.rs
 // ============================
 //! Session token handling and management.
-use uuid::Uuid;
 use tokio::sync::RwLock;
 use std::{collections::HashMap, sync::Arc, time::{Duration, SystemTime}};
 use metrics::{counter, gauge};

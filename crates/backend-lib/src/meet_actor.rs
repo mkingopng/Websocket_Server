@@ -2,11 +2,8 @@
 // openlifter-backend-lib/src/meet_actor.rs
 // ============================
 use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Arc;
 use tokio::sync::{mpsc, broadcast};
-use serde::{Serialize, Deserialize};
-use openlifter_common::{Seq, Update, UpdateWithServerSeq};
+use openlifter_common::{Update, UpdateWithServerSeq};
 use crate::{storage::Storage, error::AppError, storage::FlatFileStorage};
 use uuid::Uuid;
 use serde_json::Value;
@@ -130,8 +127,8 @@ impl MeetActor {
 
     pub async fn handle_update(
         &mut self,
-        client_id: String,
-        priority: u8,
+        _client_id: String,
+        _priority: u8,
         updates: Vec<Update>,
     ) -> Result<Vec<(u64, u64)>, AppError> {
         let mut results = Vec::new();

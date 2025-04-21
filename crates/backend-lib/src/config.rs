@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use config::{Config as ConfigSource, ConfigError, Environment, File};
+use config::{Config as ConfigSource, Environment, File};
 use anyhow::Result;
 
 /// Server configuration

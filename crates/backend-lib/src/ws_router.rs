@@ -13,7 +13,7 @@ use axum::{
 };
 use openlifter_common::{ClientToServer, ServerToClient};
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{mpsc, broadcast};
+use tokio::sync::{mpsc};
 use crate::{AppState, error::AppError, handlers::live::handle_client_message};
 use metrics::{counter, gauge};
 

@@ -10,7 +10,6 @@ use crate::auth::{hash_password, verify_password, validate_password_strength, Pa
 use rand::Rng;
 use metrics::{counter, histogram};
 use std::time::Instant;
-use log;
 
 /// Handle a client message
 pub async fn handle_client_message(
@@ -20,7 +19,7 @@ pub async fn handle_client_message(
 ) -> Result<(), AppError> {
     let start = Instant::now();
     
-    let result = match msg {
+    let _result = match msg {
         ClientToServer::CreateMeet { this_location_name, password, endpoints } => {
             // Validate password strength
             let requirements = PasswordRequirements::default();
@@ -36,9 +35,9 @@ pub async fn handle_client_message(
             // Generate a meet ID
             let meet_id = format!(
                 "{}-{}-{}",
-                rand::thread_rng().gen_range(100..1000),
-                rand::thread_rng().gen_range(100..1000),
-                rand::thread_rng().gen_range(100..1000)
+                rand::rng().random_range(100..1000),
+                rand::rng().random_range(100..1000),
+                rand::rng().random_range(100..1000)
             );
             
             // Hash the password
@@ -49,7 +48,7 @@ pub async fn handle_client_message(
             state.storage.store_meet_info(&meet_id, &hashed_password, &endpoints).await?;
             
             // Create the meet actor
-            let handle = state.meets.create_meet(meet_id.clone(), state.storage.clone()).await;
+            let _handle = state.meets.create_meet(meet_id.clone(), state.storage.clone()).await;
             
             // Create a session
             let session_token = state.auth_srv.new_session(meet_id.clone(), this_location_name, endpoints[0].priority).await;
