@@ -8,10 +8,6 @@ publish = false
 openlifter-common = { path = "../common" }
 axum              = { workspace = true }
 tokio             = { workspace = true, features = ["full"] }
-tower-http        = { workspace = true }
-tower             = { version = "0.4", features = ["util"] }
-tracing           = { workspace = true }
-tracing-subscriber = { workspace = true }
 serde             = { workspace = true }
 serde_json        = { workspace = true }
 dashmap           = { workspace = true }
@@ -21,16 +17,14 @@ rand              = { workspace = true }
 anyhow            = { workspace = true }
 thiserror         = { workspace = true }
 futures-util      = { workspace = true }
-hyper             = { workspace = true }
-async-trait       = "0.1"
-config            = "0.13"
-figment           = "0.10"
-zeroize           = "1.7"
-metrics           = "0.21"
-metrics-exporter-prometheus = "0.12"
-log               = "0.4"
+async-trait       = "0.1.88"
+config            = "0.15.11"
+zeroize           = "1.8.1"
+metrics           = "0.24.2"
+argon2 = "0.5.3"
+parking_lot = "0.12.3"
 
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio    = { workspace = true, features = ["full"] }
-tower    = { workspace = true } 
+tower    = { workspace = true }

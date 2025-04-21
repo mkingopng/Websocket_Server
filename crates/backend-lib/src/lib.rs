@@ -1,7 +1,7 @@
 // ============================
 // openlifter-backend-lib/src/lib.rs
 // ============================
-//! Core backend-lib functionality for the OpenLifter WebSocket server.
+//! Core backend-lib functionality for the `OpenLifter` WebSocket server.
 
 pub mod auth;
 pub mod error;
@@ -16,44 +16,53 @@ pub mod handlers;
 
 use std::sync::Arc;
 use dashmap::DashMap;
-use crate::auth::{SessionManager, DefaultAuth, AuthService};
+use crate::auth::{AuthService, DefaultAuth, SessionManager};
 use crate::meet::MeetManager;
 use crate::storage::{Storage, FlatFileStorage};
 use crate::config::{Settings, SettingsManager};
 
 /// Application state shared across all handlers
 #[derive(Clone)]
-pub struct AppState {
+pub struct AppState<S: Storage + Send + Sync + 'static> {
     /// Manager for all active meets
     pub meets: Arc<MeetManager>,
     /// Authentication service
     pub auth_srv: Arc<dyn AuthService>,
     /// Storage backend
-    pub storage: Arc<Box<dyn Storage + Send + Sync>>,
+    pub storage: Arc<S>,
     /// Settings manager
     pub settings: Arc<SettingsManager>,
     /// Rate limiters
     pub rate_limits: Arc<DashMap<String, middleware::rate_limit::RateLimitEntry>>,
 }
 
-impl AppState {
+impl<S: Storage + Send + Sync + 'static> AppState<S> {
     /// Create a new application state
-    pub fn new(storage: impl Storage + Send + Sync + 'static, settings: Settings) -> Result<Self, anyhow::Error> {
-        let settings = SettingsManager::new(settings)?;
-        let mut state = AppState {
-            meets: Arc::new(MeetManager::new()),
-            auth_srv: Arc::new(DefaultAuth::new(SessionManager::new())),
-            storage: Arc::new(Box::new(storage)),
-            settings: Arc::new(settings),
-            rate_limits: Arc::new(DashMap::new()),
-        };
-        middleware::rate_limit::add_rate_limiter(&mut state);
-        Ok(state)
+    pub fn new(
+        storage: S,
+        settings: Settings,
+    ) -> Result<Self, anyhow::Error> {
+        let session_manager = SessionManager::new();
+        let auth_srv: Arc<dyn AuthService> = Arc::new(DefaultAuth::new(session_manager));
+        let meets = Arc::new(MeetManager::new());
+        let settings = Arc::new(SettingsManager::new(settings)?);
+        let rate_limits = Arc::new(DashMap::new());
+        
+        Ok(AppState {
+            storage: Arc::new(storage),
+            auth_srv,
+            meets,
+            rate_limits,
+            settings,
+        })
     }
     
     /// Create a new application state with default settings
-    pub fn new_default() -> Result<Self, anyhow::Error> {
-        let storage = FlatFileStorage::new("data")?;
+    pub fn new_default() -> Result<Self, anyhow::Error> 
+    where
+        S: From<FlatFileStorage>,
+    {
+        let storage = S::from(FlatFileStorage::new("data")?);
         let settings = config::load_settings()?;
         Self::new(storage, settings)
     }

@@ -4,99 +4,97 @@
 //! WebSocket router and connection handling.
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
+        ws::{WebSocket, Message, WebSocketUpgrade},
         State,
     },
-    response::IntoResponse,
     routing::get,
     Router,
+    response::IntoResponse,
 };
-use openlifter_common::{ClientToServer, ServerToClient};
-use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{mpsc};
-use crate::{AppState, error::AppError, handlers::live::handle_client_message};
+use futures_util::{StreamExt, SinkExt};
+use tokio::sync::mpsc;
+use crate::{AppState, error::AppError, handlers::live};
 use metrics::{counter, gauge};
+use std::sync::Arc;
+use openlifter_common::{ClientToServer, ServerToClient};
+use crate::storage::Storage;
 
 /// Create the WebSocket router
-pub fn router(app_state: AppState) -> Router<AppState> {
+pub fn create_router<S: Storage + Send + Sync + Clone + 'static>(state: Arc<AppState<S>>) -> Router {
     Router::new()
         .route("/ws", get(ws_handler))
-        .route("/healthz", get(health_check))
-        .with_state(app_state)
-}
-
-/// Health check endpoint
-async fn health_check() -> impl IntoResponse {
-    "OK"
+        .with_state(state)
 }
 
 /// WebSocket connection handler
-#[axum::debug_handler]
-async fn ws_handler(
+async fn ws_handler<S: Storage + Send + Sync + Clone + 'static>(
     ws: WebSocketUpgrade,
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState<S>>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, state))
+    ws.on_upgrade(move |socket| async move {
+        if let Err(e) = handle_connection(socket, state).await {
+            eprintln!("WebSocket error: {e}");
+        }
+    })
 }
 
 /// Handle an individual WebSocket connection
-async fn handle_socket(socket: WebSocket, state: AppState) {
+async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
+    socket: WebSocket,
+    state: Arc<AppState<S>>,
+) -> Result<(), AppError> {
     // Update metrics
-    counter!("ws.connection", 1);
-    gauge!("ws.active", 1.0, "action" => "inc");
-    
-    let (mut sender, mut receiver) = socket.split();
+    let _ = counter!("ws.connection", &[("value", "1")]);
+    let _ = gauge!("ws.active", &[("value", "1")]);
+
+    // Split the socket
+    let (mut ws_tx, mut ws_rx) = socket.split();
+
+    // Create a channel for sending messages back to the client
     let (tx, mut rx) = mpsc::channel(32);
 
-    // Helper function to handle errors consistently
-    let handle_error = |e: AppError| -> ServerToClient {
-        ServerToClient::MalformedMessage { err_msg: e.to_string() }
-    };
-
-    // Helper function to send error messages
-    let send_error = |tx: &mpsc::Sender<Message>, err: ServerToClient| {
-        if let Ok(json) = serde_json::to_string(&err) {
-            let _ = tx.try_send(Message::Text(json.into()));
+    // Spawn task to forward messages from channel to websocket
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if let Err(e) = ws_tx.send(msg).await {
+                return Err(AppError::Internal(format!("Failed to send message: {e}")));
+            }
         }
-    };
+        Ok(())
+    });
 
     // Handle incoming messages
-    let mut recv_task = tokio::spawn(async move {
-        while let Some(Ok(msg)) = receiver.next().await {
-            if let Message::Text(msg_text) = msg {
-                match serde_json::from_str::<ClientToServer>(&msg_text) {
+    while let Some(Ok(msg)) = ws_rx.next().await {
+        match msg {
+            Message::Text(text) => {
+                match serde_json::from_str::<ClientToServer>(&text) {
                     Ok(client_msg) => {
-                        match handle_client_message(client_msg, &state, tx.clone()).await {
-                            Ok(_) => (),
-                            Err(e) => send_error(&tx, handle_error(e)),
+                        if let Err(e) = live::handle_client_message(client_msg, &state, tx.clone()).await {
+                            let err = ServerToClient::MalformedMessage { 
+                                err_msg: format!("Failed to handle message: {e}") 
+                            };
+                            let json = serde_json::to_string(&err)?;
+                            tx.send(Message::Text(json.into())).await?;
                         }
                     }
                     Err(e) => {
                         let err = ServerToClient::MalformedMessage { 
-                            err_msg: format!("Failed to parse message: {}", e) 
+                            err_msg: format!("Failed to parse message: {e}") 
                         };
-                        send_error(&tx, err);
+                        let json = serde_json::to_string(&err)?;
+                        tx.send(Message::Text(json.into())).await?;
                     }
                 }
             }
+            Message::Close(_) => break,
+            _ => (),
         }
-    });
+    }
 
-    // Handle outgoing messages
-    let mut send_task = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            if sender.send(msg).await.is_err() {
-                break;
-            }
-        }
-    });
+    // Update metrics when connection closes
+    let _ = gauge!("ws.active", &[("value", "-1")]);
 
-    // Wait for either task to finish
-    tokio::select! {
-        _ = (&mut recv_task) => send_task.abort(),
-        _ = (&mut send_task) => recv_task.abort(),
-    };
-    
-    // Update metrics
-    gauge!("ws.active", -1.0, "action" => "dec");
+    // Cancel the send task
+    send_task.abort();
+    Ok(())
 } 

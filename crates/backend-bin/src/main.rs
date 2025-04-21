@@ -1,6 +1,9 @@
 use axum::{
     Router,
-    extract::{ws::{WebSocket, WebSocketUpgrade}, State},
+    extract::{
+        ws::{WebSocket, WebSocketUpgrade},
+        State,
+    },
     routing::get,
     response::IntoResponse,
 };
@@ -8,28 +11,26 @@ use backend_lib::{AppState, config::Settings, storage::FlatFileStorage};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
-async fn handle_socket(mut socket: WebSocket, _state: State<AppState>) {
+async fn handle_socket(mut socket: WebSocket, _state: State<AppState<FlatFileStorage>>) {
     println!("New WebSocket connection established");
     
-    // Echo any messages received
     while let Some(msg) = socket.recv().await {
-        println!("Received message: {:?}", msg);
-        if let Ok(msg) = msg {
-            if let Err(e) = socket.send(msg).await {
-                println!("Error sending message: {}", e);
-                break;
-            }
-        } else {
-            println!("Error receiving message");
-            break;
+        let Ok(msg) = msg else {
+            return;
+        };
+        
+        println!("Received message: {msg:?}");
+        
+        if let Err(e) = socket.send(msg).await {
+            println!("Error sending message: {e}");
+            return;
         }
     }
-    println!("WebSocket connection closed");
 }
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    State(state): State<AppState>,
+    State(state): State<AppState<FlatFileStorage>>,
 ) -> impl IntoResponse {
     println!("WebSocket upgrade request received");
     ws.on_upgrade(move |socket| handle_socket(socket, State(state)))
@@ -37,6 +38,9 @@ async fn ws_handler(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
+
     // Initialize configuration
     let config = Settings::load()?;
 
@@ -46,18 +50,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create application state
     let state = AppState::new(storage, config)?;
 
-    // Build our application with some routes
+    // Create the router
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .with_state(state);
 
-    // Run it
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    println!("listening on {}", addr);
-    
-    let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app.into_make_service())
-        .await?;
+    // Start the server
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let listener = TcpListener::bind(&addr).await?;
+    println!("listening on {addr}");
+
+    axum::serve(listener, app).await?;
 
     Ok(())
 } 

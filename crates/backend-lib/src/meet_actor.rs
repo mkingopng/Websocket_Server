@@ -96,12 +96,6 @@ impl MeetHandle {
     }
 }
 
-struct StateUpdate {
-    update: UpdateWithServerSeq,
-    client_id: ClientId,
-    priority: u8,
-}
-
 pub struct MeetActor {
     meet_id: String,
     storage: Box<dyn Storage + Send + Sync>,
@@ -113,7 +107,11 @@ pub struct MeetActor {
 }
 
 impl MeetActor {
-    pub fn new(meet_id: String, storage: impl Storage + Send + Sync + 'static, tx_relay: broadcast::Sender<UpdateWithServerSeq>) -> Self {
+    pub fn new(
+        meet_id: String,
+        storage: impl Storage + 'static,
+        tx_relay: broadcast::Sender<UpdateWithServerSeq>,
+    ) -> Self {
         MeetActor {
             meet_id,
             storage: Box::new(storage),
@@ -144,7 +142,7 @@ impl MeetActor {
             };
             
             // Apply the update to our state
-            self.apply_update(&update_with_seq)?;
+            self.apply_update(&update_with_seq);
             
             // Store in our map of updates by key
             self.updates_by_key.insert(update.update_key.clone(), update_with_seq.clone());
@@ -163,8 +161,8 @@ impl MeetActor {
         }
         
         // Update metrics
-        counter!("meet.updates", 1, "meet_id" => self.meet_id.clone());
-        histogram!("meet.update.batch_size", updates_len as f64, "meet_id" => self.meet_id.clone());
+        let _ = counter!("meet.updates", &[("value", "1")]);
+        let _ = histogram!("meet.update.batch_size", &[("value", updates_len.to_string())]);
         
         Ok(results)
     }
@@ -176,7 +174,7 @@ impl MeetActor {
             .collect()
     }
 
-    fn apply_update(&mut self, update: &UpdateWithServerSeq) -> Result<(), AppError> {
+    fn apply_update(&mut self, update: &UpdateWithServerSeq) {
         // Apply the update to our state
         // This is a simplified version - in a real app, you'd have more complex state management
         if let Some(obj) = self.state.as_object_mut() {
@@ -186,8 +184,6 @@ impl MeetActor {
                 update.update.update_key.clone(): update.update.update_value.clone()
             });
         }
-        
-        Ok(())
     }
 
     pub fn get_state(&self) -> Value {
@@ -218,15 +214,18 @@ impl MeetActor {
         self.storage.store_meet_csv(&self.meet_id, &opl_csv, &return_email).await?;
         
         // Update metrics
-        counter!("meet.published", 1, "meet_id" => self.meet_id.clone());
-        histogram!("meet.csv_size", opl_csv.len() as f64);
+        let _ = counter!("meet.published", &[("value", "1")]);
+        let _ = histogram!("meet.csv_size", &[("value", opl_csv.len().to_string())]);
         
         Ok(())
     }
 }
 
 /// Spawn a new meet actor and return its handle
-pub async fn spawn_meet_actor(meet_id: &str, storage: impl Storage + Send + Sync + 'static) -> MeetHandle {
+pub async fn spawn_meet_actor(
+    meet_id: &str,
+    storage: impl Storage + 'static,
+) -> MeetHandle {
     let (cmd_tx, rx_cmd) = mpsc::unbounded_channel();
     let (relay_tx, _) = broadcast::channel(32);
     let actor = MeetActor::new(meet_id.to_string(), storage, relay_tx.clone());
@@ -243,6 +242,7 @@ mod tests {
     use super::*;
     use tokio;
     use tempfile::TempDir;
+    use crate::storage::FlatFileStorage;
 
     async fn setup() -> (MeetActor, TempDir) {
         let temp_dir = TempDir::new().unwrap();

@@ -1,8 +1,8 @@
 // common/src/lib.rs
-//! Common types and structures shared between client and server.
+//! Common types and structures
+//! used for communication between the `OpenLifter` client and server.
 //! 
-//! This module defines the WebSocket protocol messages and supporting types
-//! used for communication between the OpenLifter client and server.
+//! This module defines the WebSocket protocol messages and supporting types.
 
 use serde::{Deserialize, Serialize};
 
@@ -122,7 +122,7 @@ pub enum ServerToClient {
     },
     /// Acknowledgment of updates
     UpdateAck { 
-        /// List of (local_seq, server_seq) pairs
+        /// List of (`local_seq`, `server_seq`) pairs
         update_acks: Vec<(Seq, Seq)> 
     },
     /// Rejection of updates

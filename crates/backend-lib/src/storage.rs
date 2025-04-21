@@ -198,8 +198,8 @@ impl Storage for FlatFileStorage {
         let content = tokio_fs::read_to_string(&path).await?;
         let updates: Vec<String> = content
             .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string)
             .collect();
 
         Ok(updates)

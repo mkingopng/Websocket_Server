@@ -4,11 +4,13 @@
 //! Password hashing and verification.
 use scrypt::{password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng}, Scrypt};
 use zeroize::Zeroize;
+use argon2::Argon2;
 
 /// Minimum password length
 pub const MIN_PASSWORD_LENGTH: usize = 10;
 
 /// Password complexity requirements
+#[allow(clippy::struct_excessive_bools)]
 pub struct PasswordRequirements {
     pub min_length: usize,
     pub require_uppercase: bool,
@@ -39,12 +41,9 @@ pub fn hash_password(plain: &str) -> anyhow::Result<String> {
 }
 
 /// Verify a password against a hash
-pub fn verify_password(hash: &str, plain: &str) -> bool {
-    let parsed_hash = match PasswordHash::new(hash) {
-        Ok(h) => h,
-        Err(_) => return false,
-    };
-    Scrypt.verify_password(plain.as_bytes(), &parsed_hash).is_ok()
+pub fn verify_password(hash: &str, password: &str) -> bool {
+    let Ok(parsed_hash) = PasswordHash::new(hash) else { return false };
+    Argon2::default().verify_password(password.as_bytes(), &parsed_hash).is_ok()
 }
 
 /// Check if a password meets the complexity requirements
@@ -53,15 +52,15 @@ pub fn validate_password_strength(password: &str, requirements: &PasswordRequire
         return false;
     }
     
-    if requirements.require_uppercase && !password.chars().any(|c| c.is_uppercase()) {
+    if requirements.require_uppercase && !password.chars().any(char::is_uppercase) {
         return false;
     }
     
-    if requirements.require_lowercase && !password.chars().any(|c| c.is_lowercase()) {
+    if requirements.require_lowercase && !password.chars().any(char::is_lowercase) {
         return false;
     }
     
-    if requirements.require_digit && !password.chars().any(|c| c.is_digit(10)) {
+    if requirements.require_digit && !password.chars().any(|c| c.is_ascii_digit()) {
         return false;
     }
     

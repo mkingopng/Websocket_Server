@@ -1,4 +1,4 @@
-//! Middleware for the OpenLifter WebSocket server.
+//! Middleware for the `OpenLifter` WebSocket server.
 
 pub mod rate_limit;
 

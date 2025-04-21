@@ -7,11 +7,5 @@ publish = false
 [dependencies]
 backend-lib = { path = "../backend-lib" }
 tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
 axum = { workspace = true }
-metrics-exporter-prometheus = "0.12"
-config = "0.13" 
-hyper.workspace = true
-futures-util.workspace = true
+tracing-subscriber.workspace = true

@@ -4,15 +4,19 @@
 //! Meet management and actor coordination.
 use dashmap::DashMap;
 use std::sync::Arc;
-use crate::meet_actor::{MeetHandle, spawn_meet_actor};
-use crate::storage::Storage;
+use crate::{storage::Storage, meet_actor::{spawn_meet_actor, MeetHandle}};
 use metrics::{counter, gauge};
 
-pub type MeetId = String;
-
-/// Manager for all active meets
+/// Manager for live meets
+#[derive(Clone)]
 pub struct MeetManager {
-    meets: Arc<DashMap<MeetId, MeetHandle>>,
+    meets: Arc<DashMap<String, MeetHandle>>,
+}
+
+impl Default for MeetManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MeetManager {
@@ -27,31 +31,32 @@ impl MeetManager {
     pub async fn create_meet(
         &self, 
         meet_id: String, 
-        storage: impl Storage + Send + Sync + 'static
+        storage: impl Storage + 'static
     ) -> MeetHandle {
-        // Spawn the actor
         let handle = spawn_meet_actor(&meet_id, storage).await;
-        
-        // Store the handle in our map
         self.meets.insert(meet_id.clone(), handle.clone());
         
         // Update metrics
-        counter!("meet.created", 1);
-        gauge!("meet.active", self.meets.len() as f64);
+        let _ = counter!("meet.created", &[("value", "1")]);
+        let _ = gauge!("meet.active", &[("value", "1")]);
         
         handle
     }
     
     /// Get a meet handle by ID
     pub fn get_meet(&self, meet_id: &str) -> Option<MeetHandle> {
-        self.meets.get(meet_id).map(|entry| entry.value().clone())
+        self.meets.get(meet_id).map(|h| h.clone())
     }
     
     /// Delete a meet
-    pub fn delete_meet(&self, meet_id: &str) {
+    pub fn delete_meet(&self, meet_id: &str) -> bool {
         if self.meets.remove(meet_id).is_some() {
-            counter!("meet.deleted", 1);
-            gauge!("meet.active", self.meets.len() as f64);
+            // Update metrics
+            let _ = counter!("meet.deleted", &[("value", "1")]);
+            let _ = gauge!("meet.active", &[("value", "-1")]);
+            true
+        } else {
+            false
         }
     }
     

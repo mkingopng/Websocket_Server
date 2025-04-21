@@ -1,4 +1,4 @@
-use super::*;
+use super::{AuthService, PasswordRequirements, Session, SessionManager};
 use super::password::{hash_password, verify_password, validate_password_strength};
 use async_trait::async_trait;
 
@@ -24,11 +24,11 @@ impl AuthService for DefaultAuth {
         validate_password_strength(pwd, req)
     }
     
-    async fn new_session(&self, m: String, l: String, p: u8) -> String {
-        self.sm.new_session(m, l, p).await
+    async fn new_session(&self, meet_id: String, location_name: String, priority: u8) -> String {
+        self.sm.new_session(meet_id, location_name, priority)
     }
     
-    async fn get_session(&self, t: &str) -> Option<Session> {
-        self.sm.get(t).await
+    async fn get_session(&self, token: &str) -> Option<Session> {
+        self.sm.get_session(token)
     }
 } 

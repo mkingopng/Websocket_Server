@@ -8,10 +8,11 @@ use axum::{
 };
 use dashmap::DashMap;
 use crate::{AppState, error::AppError};
+use crate::storage::Storage;
 
 /// Rate limiter middleware
-pub async fn rate_limit(
-    State(state): State<Arc<AppState>>,
+pub async fn rate_limit<S: Storage + Send + Sync + 'static>(
+    State(state): State<Arc<AppState<S>>>,
     request: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, AppError> {
@@ -60,7 +61,7 @@ pub struct RateLimitEntry {
     window_start: Instant,
 }
 
-/// Add rate limiter to AppState
-pub fn add_rate_limiter(state: &mut AppState) {
+/// Add rate limiter to `AppState`
+pub fn add_rate_limiter<S: Storage + Send + Sync + 'static>(state: &mut AppState<S>) {
     state.rate_limits = Arc::new(DashMap::new());
 } 
