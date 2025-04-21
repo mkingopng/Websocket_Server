@@ -34,6 +34,10 @@ pub enum ServerMessage {
         meet_id: String,
         update_ids: Vec<String>,
     },
+    UpdateRelay {
+        meet_id: String,
+        updates: Vec<UpdateWithMetadata>,
+    },
     Error {
         code: String,
         message: String,
@@ -45,6 +49,13 @@ pub struct Update {
     pub location: String,
     pub value: String,
     pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateWithMetadata {
+    pub update: Update,
+    pub source_client: String,
+    pub server_seq: u64,
 }
 
 #[derive(Debug, Clone)]

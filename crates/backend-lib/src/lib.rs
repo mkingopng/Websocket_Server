@@ -21,6 +21,7 @@ use crate::auth::{AuthService, DefaultAuth, SessionManager};
 use crate::config::Settings;
 use crate::storage::FlatFileStorage;
 use crate::middleware::rate_limit::RateLimiter;
+use dashmap;
 
 /// Application state shared across all handlers
 #[derive(Clone)]
@@ -35,6 +36,8 @@ pub struct AppState<S> {
     pub storage: S,
     /// Rate limiter
     pub rate_limiter: Arc<RateLimiter>,
+    /// Connected clients by meet ID
+    pub clients: Arc<dashmap::DashMap<String, Vec<tokio::sync::mpsc::Sender<messages::ServerMessage>>>>,
 }
 
 impl<S> AppState<S> {
@@ -47,6 +50,7 @@ impl<S> AppState<S> {
             std::time::Duration::from_secs(60),
             100,
         ));
+        let clients = Arc::new(dashmap::DashMap::new());
         
         Ok(Self {
             auth,
@@ -54,6 +58,7 @@ impl<S> AppState<S> {
             settings,
             storage,
             rate_limiter,
+            clients,
         })
     }
     

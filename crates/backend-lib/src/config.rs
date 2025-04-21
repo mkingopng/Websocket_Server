@@ -51,6 +51,16 @@ impl Settings {
         config.try_deserialize()
     }
 
+    /// Load configuration from a specified path
+    pub fn load_from(path: &str) -> Result<Self, ConfigError> {
+        let config = Config::builder()
+            .add_source(config::File::with_name(path))
+            .add_source(config::Environment::with_prefix("APP"))
+            .build()?;
+
+        config.try_deserialize()
+    }
+
     pub fn get_rate_limit_settings(&self) -> &RateLimitSettings {
         &self.rate_limit
     }

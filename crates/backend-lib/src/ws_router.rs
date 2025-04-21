@@ -18,6 +18,8 @@ use std::sync::Arc;
 use crate::AppState;
 use crate::storage::Storage;
 use crate::websocket::WebSocketHandler;
+use crate::messages::ClientMessage;
+use crate::messages::ServerMessage;
 
 /// Create the WebSocket router
 pub fn create_router<S: Storage + Send + Sync + Clone + 'static>(state: Arc<AppState<S>>) -> Router {
@@ -51,18 +53,39 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
     // Split the socket
     let (mut ws_tx, mut ws_rx) = socket.split();
 
-    // Create a channel for sending messages back to the client
-    let (tx, mut rx) = mpsc::channel(32);
+    // Create a channel for sending messages to the client websocket
+    let (client_tx, mut client_rx) = mpsc::channel(32);
+    
+    // Create a separate channel for ServerMessage
+    let (server_tx, mut server_rx) = mpsc::channel::<ServerMessage>(32);
 
     // Create WebSocket handler
-    let handler = WebSocketHandler::new(state);
+    let mut handler = WebSocketHandler::new(state.clone());
 
-    // Spawn task to forward messages from channel to websocket
+    // Track which meet this client is connected to (for unregistering later)
+    let mut connected_meet_id: Option<String> = None;
+
+    // Task 1: Forward messages from client_rx to the websocket
     let send_task = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
+        while let Some(msg) = client_rx.recv().await {
             if let Err(e) = ws_tx.send(msg).await {
                 eprintln!("Failed to send message: {e}");
                 break;
+            }
+        }
+    });
+    
+    // Task 2: Convert ServerMessages to WebSocket Messages
+    let client_tx_clone = client_tx.clone();
+    tokio::spawn(async move {
+        while let Some(server_msg) = server_rx.recv().await {
+            // Convert ServerMessage to JSON string
+            if let Ok(json) = serde_json::to_string(&server_msg) {
+                // Send as WebSocket text message
+                if let Err(e) = client_tx_clone.send(Message::Text(json.into())).await {
+                    eprintln!("Failed to convert server message: {e}");
+                    break;
+                }
             }
         }
     });
@@ -71,24 +94,52 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
     while let Some(Ok(msg)) = ws_rx.next().await {
         match msg {
             Message::Text(text) => {
-                match serde_json::from_str(&text) {
+                match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(client_msg) => {
-                        let err_tx = tx.clone();
-                        if let Err(e) = handler.handle_message(client_msg).await {
-                            let err = serde_json::json!({
-                                "type": "Error",
-                                "payload": {
-                                    "code": "INTERNAL_ERROR",
-                                    "message": e.to_string()
+                        // Extract meet_id for tracking
+                        let meet_id = match &client_msg {
+                            ClientMessage::CreateMeet { meet_id, .. } => Some(meet_id.clone()),
+                            ClientMessage::JoinMeet { meet_id, .. } => Some(meet_id.clone()),
+                            ClientMessage::UpdateInit { meet_id, .. } => Some(meet_id.clone()),
+                        };
+
+                        // If this is the first message with a meet_id, register the client
+                        if connected_meet_id.is_none() && meet_id.is_some() {
+                            let meet_id = meet_id.unwrap();
+                            handler.register_client(&meet_id, server_tx.clone());
+                            connected_meet_id = Some(meet_id);
+                        }
+
+                        // Process the message
+                        match handler.handle_message(client_msg).await {
+                            Ok(response) => {
+                                // Serialize response to JSON
+                                let response_json = serde_json::to_string(&response)
+                                    .unwrap_or_else(|_| String::from("{\"type\":\"Error\",\"payload\":{\"code\":\"SERIALIZATION_ERROR\",\"message\":\"Failed to serialize response\"}}"));
+                                
+                                // Send response directly without using server_tx
+                                if let Err(e) = client_tx.send(Message::Text(response_json.into())).await {
+                                    eprintln!("Failed to send response: {e}");
+                                    break;
                                 }
-                            });
-                            let err_str = err.to_string();
-                            if let Err(e) = err_tx.send(Message::Text(err_str.into())).await {
-                                eprintln!("Failed to send error message: {e}");
-                                break;
+                            },
+                            Err(e) => {
+                                let err_msg = serde_json::json!({
+                                    "type": "Error",
+                                    "payload": {
+                                        "code": "INTERNAL_ERROR",
+                                        "message": e.to_string()
+                                    }
+                                });
+                                
+                                let err_str = err_msg.to_string();
+                                if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
+                                    eprintln!("Failed to send error message: {e}");
+                                    break;
+                                }
                             }
                         }
-                    }
+                    },
                     Err(e) => {
                         let err = serde_json::json!({
                             "type": "Error",
@@ -98,16 +149,21 @@ async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
                             }
                         });
                         let err_str = err.to_string();
-                        if let Err(e) = tx.send(Message::Text(err_str.into())).await {
+                        if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
                             eprintln!("Failed to send error message: {e}");
                             break;
                         }
                     }
                 }
-            }
+            },
             Message::Close(_) => break,
             _ => (),
         }
+    }
+
+    // Unregister client when connection closes
+    if let Some(meet_id) = connected_meet_id {
+        handler.unregister_client(&meet_id);
     }
 
     // Update metrics when connection closes
