@@ -2,7 +2,6 @@
 //!
 //! This module implements the WebSocket handler for the `OpenLifter` backend server.
 //! It provides functionality for:
-//!
 //! - Client registration and session management
 //! - Message handling for different client request types
 //! - Update broadcasting to connected clients
@@ -14,15 +13,12 @@
 //! coordinate between multiple clients.
 //!
 //! # Network Resilience
-//!
 //! The handler implements several mechanisms for handling network interruptions:
-//!
 //! - Automatic reconnection attempts when sessions expire or connections drop
 //! - Exponential backoff for retry attempts
 //! - Message delivery guarantees with retry logic
 //!
 //! # Conflict Resolution
-//!
 //! When multiple clients update the same "location" (data entity), the handler
 //! resolves conflicts based on client priority levels, with higher priority updates
 //! taking precedence.
@@ -137,6 +133,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     }
 
     // Broadcast updates to all connected clients for a meet
+    #[allow(dead_code)]
     async fn broadcast_update(&self, meet_id: &str, updates: Vec<Update>) -> Result<()> {
         // Check if we have clients for this meet
         if let Some(clients) = self.state.clients.get(meet_id) {
@@ -288,12 +285,11 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     }
 
     /// Initiate state recovery for a meet
-    ///
     /// This method is called when the server detects a state inconsistency
     /// or after restart. It broadcasts a request to all connected clients
     /// to send their update logs.
     pub async fn initiate_state_recovery(&self, meet_id: &str, last_known_seq: u64) -> Result<()> {
-        println!("Initiating state recovery for meet {meet_id} from seq {last_known_seq}");
+        println!("State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}");
 
         // Create recovery request message
         let recovery_msg = ServerMessage::StateRecoveryRequest {
@@ -332,7 +328,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     }
 
     /// Handle a state recovery response from a client
-    ///
     /// This method processes updates from a client during state recovery,
     /// resolving conflicts and updating the server's state.
     async fn handle_state_recovery_response(
@@ -392,14 +387,12 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         })
     }
 
-    /// Handle incoming client messages
-    ///
+    /// # Handle incoming client messages
     /// This is the main entry point for processing incoming WebSocket messages from clients.
     /// It routes different message types to appropriate handlers and implements automatic
     /// reconnection logic when sessions are invalid.
     ///
     /// # Message Types
-    ///
     /// The handler supports the following client message types:
     /// - `CreateMeet`: Initialize a new meet and create a session
     /// - `JoinMeet`: Join an existing meet and create a session
@@ -409,23 +402,24 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     /// - `StateRecoveryResponse`: Handle state recovery responses
     ///
     /// # Network Resilience
-    ///
     /// If a message arrives with an invalid session token (e.g., after a network
     /// interruption), the handler will attempt to reconnect automatically using
     /// the `try_reconnect` method with exponential backoff.
     ///
-    /// # Priority Handling
+    /// # State Recovery
+    /// If sequence gaps or state inconsistency is detected, the handler will
+    /// automatically trigger state recovery by requesting updates from all connected
+    /// clients.
     ///
+    /// # Priority Handling
     /// Client priority is recorded during meet creation/joining and used for conflict
     /// resolution when updates from multiple clients target the same location.
     ///
     /// # Returns
-    ///
     /// Returns a `Result` containing the appropriate `ServerMessage` response, which
     /// will be sent back to the client over the WebSocket.
     ///
     /// # Errors
-    ///
     /// Returns an error if message processing fails, which may happen due to:
     /// - Invalid session that cannot be recovered
     /// - Storage errors
@@ -499,35 +493,111 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                         // Update client priority from session
                         self.set_priority(session.priority);
 
-                        // Generate update IDs
-                        let update_ids: Vec<String> =
-                            updates.iter().map(|_| Uuid::new_v4().to_string()).collect();
+                        // Get handle to the meet actor using if let instead of unwrap
+                        let meet_handle =
+                            if let Some(handle) = self.state.meet_handles.get(&meet_id) {
+                                handle.clone()
+                            } else {
+                                // Create a new meet actor if one doesn't exist
+                                let storage = self.state.storage.clone();
+                                let handle =
+                                    crate::meet_actor::spawn_meet_actor(&meet_id, storage).await;
+                                self.state
+                                    .meet_handles
+                                    .insert(meet_id.clone(), handle.clone());
+                                handle
+                            };
 
-                        // Broadcast updates to other clients
-                        if !updates.is_empty() {
-                            match self.broadcast_update(&meet_id, updates.clone()).await {
-                                Ok(()) => {
-                                    // Reset reconnect attempts on successful broadcast
-                                    self.reconnect_attempts = 0;
+                        // Create openlifter_common::Update from our messages::Update
+                        let common_updates: Vec<openlifter_common::Update> = updates
+                            .iter()
+                            .map(|u| openlifter_common::Update {
+                                update_key: u.location.clone(),
+                                update_value: serde_json::from_str(&u.value)
+                                    .unwrap_or(serde_json::Value::Null),
+                                #[allow(clippy::cast_sign_loss)]
+                                local_seq_num: if u.timestamp < 0 {
+                                    0
+                                } else {
+                                    u.timestamp as u64
                                 },
-                                Err(e) => {
-                                    println!("Warning: Error broadcasting update: {e}");
-                                    // Don't reset reconnect attempts here
-                                },
-                            }
+                                after_server_seq_num: 0, // TODO: Implement proper server seq tracking
+                            })
+                            .collect();
+
+                        // Apply updates to the meet actor
+                        match meet_handle
+                            .apply_updates(self.client_id.clone(), session.priority, common_updates)
+                            .await
+                        {
+                            Ok(_seq_mappings) => {
+                                // Create ACK with update IDs
+                                let update_ids = updates
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, _)| i.to_string())
+                                    .collect();
+
+                                Ok(ServerMessage::UpdateAck {
+                                    meet_id,
+                                    update_ids,
+                                })
+                            },
+                            Err(e) => {
+                                match e {
+                                    crate::error::AppError::NeedsRecovery {
+                                        meet_id,
+                                        last_known_seq,
+                                    } => {
+                                        // Automatically initiate state recovery
+                                        println!(
+                                            "State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}"
+                                        );
+
+                                        // Initiate state recovery
+                                        match self
+                                            .initiate_state_recovery(&meet_id, last_known_seq)
+                                            .await
+                                        {
+                                            Ok(()) => {
+                                                // Return a special message to inform the client we're recovering
+                                                Ok(ServerMessage::StateRecoveryRequest {
+                                                    meet_id: meet_id.clone(),
+                                                    last_known_seq,
+                                                })
+                                            },
+                                            Err(recovery_err) => {
+                                                // If recovery initiation failed, return error
+                                                println!(
+                                                    "Failed to initiate state recovery: {recovery_err}"
+                                                );
+                                                Ok(ServerMessage::Error {
+                                                    code: "RECOVERY_FAILED".to_string(),
+                                                    message: recovery_err.to_string(),
+                                                })
+                                            },
+                                        }
+                                    },
+                                    other_err => {
+                                        // Handle other errors
+                                        println!("Error applying updates: {other_err}");
+                                        Ok(ServerMessage::Error {
+                                            code: "UPDATE_ERROR".to_string(),
+                                            message: other_err.to_string(),
+                                        })
+                                    },
+                                }
+                            },
                         }
-
-                        // Return ack response
-                        Ok(ServerMessage::UpdateAck {
-                            meet_id,
-                            update_ids,
-                        })
                     } else {
-                        // This is unexpected - the session is valid but we can't get its details
-                        Ok(ServerMessage::InvalidSession { session_token })
+                        // Session not found but token was valid (should not happen)
+                        Ok(ServerMessage::Error {
+                            code: "SESSION_ERROR".to_string(),
+                            message: "Session token is valid but session not found".to_string(),
+                        })
                     }
                 } else {
-                    // Session may have expired - attempt to reconnect
+                    // Session is invalid, try to reconnect
                     match self.try_reconnect(&meet_id, &session_token).await {
                         Ok(reconnected) => {
                             if reconnected {

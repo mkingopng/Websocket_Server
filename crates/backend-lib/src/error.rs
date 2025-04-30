@@ -40,6 +40,12 @@ pub enum AppError {
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    #[error("State inconsistency detected for meet {meet_id}, recovery needed (last_known_seq: {last_known_seq})")]
+    NeedsRecovery {
+        meet_id: String,
+        last_known_seq: u64,
+    },
 }
 
 impl AppError {
@@ -50,6 +56,7 @@ impl AppError {
             AppError::NotFound(_) | AppError::MeetNotFound => StatusCode::NOT_FOUND,
             AppError::InvalidMeetId | AppError::InvalidInput(_) => StatusCode::BAD_REQUEST,
             AppError::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
+            AppError::NeedsRecovery { .. } => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -67,6 +74,7 @@ impl AppError {
             AppError::InvalidMeetId => "MEET_002",
             AppError::RateLimitExceeded => "RATE_001",
             AppError::InvalidInput(_) => "VAL_001",
+            AppError::NeedsRecovery { .. } => "RECOVERY_001",
         }
     }
 }

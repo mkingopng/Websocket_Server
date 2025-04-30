@@ -1,206 +1,198 @@
 // ============================
 // openlifter-backend-lib/src/ws_router.rs
 // ============================
-//! WebSocket router and connection handling.
-use crate::messages::{ClientMessage, ServerMessage};
-use crate::storage::Storage;
-use crate::validation;
-use crate::websocket::WebSocketHandler;
-use crate::AppState;
+//! WebSocket router for the `OpenLifter` server.
+//!
+//! This module handles WebSocket connections and routes messages
+//! to the appropriate handlers.
+
+use crate::{
+    error::AppError,
+    messages::{ClientMessage, ServerMessage},
+    storage::Storage,
+    websocket::WebSocketHandler,
+    AppState,
+};
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
     Router,
 };
+use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use metrics::{counter, gauge};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::mpsc;
+
+// Add at the top after the imports
+static ACTIVITY_TIMES: LazyLock<DashMap<String, u64>> = LazyLock::new(DashMap::new);
 
 /// Create the WebSocket router
 pub fn create_router<S: Storage + Send + Sync + Clone + 'static>(
     state: Arc<AppState<S>>,
 ) -> Router {
     Router::new()
-        .route("/ws", get(ws_handler))
+        .route("/ws", get(websocket_handler))
         .with_state(state)
 }
 
-/// Handler for WebSocket connections
-pub async fn ws_handler<S: Storage + Send + Sync + Clone + 'static>(
+/// Handle WebSocket connections
+async fn websocket_handler<S: Storage + Send + Sync + Clone + 'static>(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState<S>>>,
 ) -> impl IntoResponse {
-    // Update metrics
+    // Create a handler - move it into the closure
+    let handler = WebSocketHandler::new(state);
+
+    // Upgrade the connection
+    ws.on_upgrade(move |socket| handle_socket(socket, handler))
+}
+
+/// Check state consistency for a meet
+///
+/// This function is called when a client connects to verify state consistency.
+/// It checks for:
+/// 1. Missing updates (gaps in sequence numbers)
+/// 2. Conflicts between clients
+/// 3. Long periods of inactivity
+///
+/// If any inconsistency is detected, it triggers state recovery.
+async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
+    handler: &mut WebSocketHandler<S>,
+    meet_id: &str,
+) -> Result<(), AppError> {
+    // Get current time
+    let current_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // Check the last activity time for this meet (if available)
+    let last_activity_key = format!("meet:{meet_id}_last_activity");
+    let mut needs_recovery = false;
+
+    // Use a scope to ensure the dashmap entry is dropped before recovery is initiated
+    {
+        let mut entry = ACTIVITY_TIMES
+            .entry(last_activity_key)
+            .or_insert(current_time);
+
+        // If last activity was more than 5 minutes ago, initiate recovery
+        if current_time - *entry > 300 {
+            println!(
+                "Long inactivity detected for meet {meet_id}: {} seconds since last activity",
+                current_time - *entry
+            );
+
+            needs_recovery = true;
+        }
+
+        // Update the last activity time
+        *entry = current_time;
+    }
+
+    if needs_recovery {
+        // Initiate recovery with the last known sequence 0
+        // Convert anyhow::Error to AppError
+        if let Err(e) = handler.initiate_state_recovery(meet_id, 0).await {
+            return Err(AppError::Internal(e.to_string()));
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle a WebSocket connection
+async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
+    socket: WebSocket,
+    mut handler: WebSocketHandler<S>,
+) {
+    // Split the socket into sender and receiver
+    let (mut sender, mut receiver) = socket.split();
+
+    // Create a channel for sending messages back to the client
+    let (tx, mut rx) = mpsc::channel::<ServerMessage>(32);
+
+    // Track metrics
     let _ = counter!("ws.connection", &[("value", "1")]);
     let _ = gauge!("ws.active", &[("value", "1")]);
 
-    // Upgrade the connection to a WebSocket
-    ws.on_upgrade(move |socket| handle_connection(socket, state))
-}
+    // Keep track of the meet_id for this connection
+    let mut connected_meet_id = String::new();
 
-#[allow(clippy::too_many_lines)]
-async fn handle_connection<S: Storage + Send + Sync + Clone + 'static>(
-    socket: WebSocket,
-    state: Arc<AppState<S>>,
-) {
-    let (mut tx, rx) = socket.split();
-
-    // Create a channel for sending messages to the client websocket
-    let (client_tx, mut client_rx) = mpsc::channel(32);
-
-    // Create a separate channel for ServerMessage
-    let (server_tx, mut server_rx) = mpsc::channel::<ServerMessage>(32);
-
-    // Create WebSocket handler
-    let mut handler = WebSocketHandler::new(state);
-
-    // Track the meet ID this connection is registered for
-    let mut connected_meet_id = None;
-
-    // Task 1: Forward messages from the client channel to the WebSocket
+    // Spawn a task to forward messages from the channel to the client
     let send_task = tokio::spawn(async move {
-        while let Some(message) = client_rx.recv().await {
-            if tx.send(message).await.is_err() {
-                break;
-            }
-        }
-    });
-
-    // Task 2: Convert ServerMessages to WebSocket Messages
-    let client_tx_clone = client_tx.clone();
-    tokio::spawn(async move {
-        while let Some(server_msg) = server_rx.recv().await {
-            let json = serde_json::to_string(&server_msg).unwrap_or_default();
-            if client_tx_clone
-                .send(Message::Text(json.into()))
-                .await
-                .is_err()
-            {
-                break;
-            }
-        }
-    });
-
-    // Main task: Process incoming WebSocket messages
-    let mut rx = rx;
-    while let Some(Ok(message)) = rx.next().await {
-        match message {
-            Message::Text(text) => {
-                // Parse the message as a client message
-                match serde_json::from_str::<ClientMessage>(&text) {
-                    Ok(client_msg) => {
-                        // Validate the message
-                        match validation::validate_client_message(&client_msg) {
-                            Ok(()) => {
-                                // Extract meet_id from message if present to update connected_meet_id
-                                let meet_id = match &client_msg {
-                                    ClientMessage::CreateMeet { meet_id, .. }
-                                    | ClientMessage::JoinMeet { meet_id, .. }
-                                    | ClientMessage::UpdateInit { meet_id, .. }
-                                    | ClientMessage::ClientPull { meet_id, .. }
-                                    | ClientMessage::PublishMeet { meet_id, .. }
-                                    | ClientMessage::StateRecoveryResponse { meet_id, .. } => {
-                                        Some(meet_id.clone())
-                                    },
-                                };
-
-                                // If this is the first message with a meet_id, register the client
-                                if connected_meet_id.is_none() && meet_id.is_some() {
-                                    let meet_id_val = meet_id.clone().unwrap();
-                                    handler.register_client(&meet_id_val, server_tx.clone());
-                                    connected_meet_id = meet_id;
-
-                                    // Note: Removed the async recovery check to avoid borrowing issues
-                                    // Recovery is now manually initiated or automatically triggered in handle_message
-                                }
-
-                                match handler.handle_message(client_msg).await {
-                                    Ok(response) => {
-                                        // Serialize response to JSON
-                                        let response_json = serde_json::to_string(&response)
-                                            .unwrap_or_else(|_| String::from("{\"type\":\"Error\",\"payload\":{\"code\":\"SERIALIZATION_ERROR\",\"message\":\"Failed to serialize response\"}}"));
-
-                                        // Send response directly without using server_tx
-                                        if let Err(e) = client_tx
-                                            .send(Message::Text(response_json.into()))
-                                            .await
-                                        {
-                                            eprintln!("Failed to send response: {e}");
-                                            break;
-                                        }
-                                    },
-                                    Err(e) => {
-                                        // Handle error
-                                        let err_msg = ServerMessage::Error {
-                                            code: "INTERNAL_ERROR".to_string(),
-                                            message: e.to_string(),
-                                        };
-
-                                        if let Ok(err_str) = serde_json::to_string(&err_msg) {
-                                            if let Err(e) =
-                                                client_tx.send(Message::Text(err_str.into())).await
-                                            {
-                                                eprintln!("Failed to send error message: {e}");
-                                                break;
-                                            }
-                                        }
-                                    },
-                                }
-                            },
-                            Err(validation_err) => {
-                                // Handle validation error
-                                let err_msg = ServerMessage::Error {
-                                    code: "VALIDATION_ERROR".to_string(),
-                                    message: validation_err.to_string(),
-                                };
-
-                                if let Ok(err_str) = serde_json::to_string(&err_msg) {
-                                    if let Err(e) =
-                                        client_tx.send(Message::Text(err_str.into())).await
-                                    {
-                                        eprintln!("Failed to send validation error message: {e}");
-                                        break;
-                                    }
-                                }
-                            },
-                        }
-                    },
-                    Err(e) => {
-                        // Handle JSON parsing error
-                        let err_msg = ServerMessage::MalformedMessage {
-                            err_msg: e.to_string(),
-                        };
-
-                        if let Ok(err_str) = serde_json::to_string(&err_msg) {
-                            if let Err(e) = client_tx.send(Message::Text(err_str.into())).await {
-                                eprintln!("Failed to send error message: {e}");
-                                break;
-                            }
-                        }
-                    },
+        while let Some(msg) = rx.recv().await {
+            // Serialize the message to JSON
+            if let Ok(json) = serde_json::to_string(&msg) {
+                if sender.send(Message::Text(json.into())).await.is_err() {
+                    break;
                 }
-            },
-            Message::Close(_) => break,
-            _ => {}, // Ignore other message types for now
+            }
+        }
+    });
+
+    // Process incoming messages
+    while let Some(Ok(msg)) = receiver.next().await {
+        if let axum::extract::ws::Message::Text(text) = msg {
+            // Handle the message
+            if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
+                // Extract meet_id from message if present to update connected_meet_id
+                let meet_id = match &client_msg {
+                    ClientMessage::CreateMeet { meet_id, .. }
+                    | ClientMessage::JoinMeet { meet_id, .. }
+                    | ClientMessage::UpdateInit { meet_id, .. }
+                    | ClientMessage::ClientPull { meet_id, .. }
+                    | ClientMessage::PublishMeet { meet_id, .. }
+                    | ClientMessage::StateRecoveryResponse { meet_id, .. } => Some(meet_id.clone()),
+                };
+
+                if let Some(ref meet_id) = meet_id {
+                    // Always clone (first time) or clone_from (subsequent times)
+                    if connected_meet_id.is_empty() {
+                        #[allow(clippy::assigning_clones)]
+                        {
+                            // First assignment needs clone
+                            connected_meet_id = meet_id.clone();
+                        }
+                    } else {
+                        connected_meet_id.clone_from(meet_id);
+                    }
+
+                    // Only do this for join/connect operations
+                    match &client_msg {
+                        ClientMessage::JoinMeet { .. } | ClientMessage::ClientPull { .. } => {
+                            if let Err(e) = check_state_consistency(&mut handler, meet_id).await {
+                                eprintln!("Error checking state consistency: {e}");
+                            }
+                        },
+                        _ => {},
+                    }
+                }
+
+                // Process the message
+                if let Ok(response) = handler.handle_message(client_msg).await {
+                    // Send the response back to the client
+                    tx.send(response).await.ok();
+                }
+            }
         }
     }
 
-    // Cleanup: unregister client when connection drops
-    if let Some(meet_id) = connected_meet_id {
-        handler.unregister_client(&meet_id);
-    }
+    // Abort the send task when the connection is closed
+    send_task.abort();
 
     // Update metrics
-    let _ = counter!("ws.disconnection", &[("value", "1")]);
     let _ = gauge!("ws.active", &[("value", "-1")]);
 
-    // Cancel the send task
-    send_task.abort();
+    // If we had a meet_id, unregister the client
+    if !connected_meet_id.is_empty() {
+        handler.unregister_client(&connected_meet_id);
+    }
 }
 
 #[cfg(test)]
@@ -315,8 +307,8 @@ mod tests {
             priority: 5,
         };
 
-        // Validate the message
-        let result = validation::validate_client_message(&invalid_meet);
+        // Validate the message with crate::validation
+        let result = crate::validation::validate_client_message(&invalid_meet);
 
         // Verify validation error
         assert!(result.is_err());

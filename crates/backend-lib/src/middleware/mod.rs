@@ -3,3 +3,6 @@
 pub mod rate_limit;
 
 pub use rate_limit::rate_limit;
+
+#[cfg(test)]
+mod middleware_tests;

@@ -158,7 +158,7 @@ impl Default for Settings {
 }
 
 #[cfg(test)]
-mod tests {
+mod config_tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;

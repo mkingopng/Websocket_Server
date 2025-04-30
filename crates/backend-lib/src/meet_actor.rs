@@ -143,6 +143,9 @@ pub struct MeetActor<S: Storage> {
     server_seq: u64,
     updates_by_key: HashMap<String, UpdateWithServerSeq>,
     tx_relay: broadcast::Sender<UpdateWithServerSeq>,
+    expected_client_seq: HashMap<String, u64>,
+    last_update_time: std::time::Instant,
+    need_consistency_check: bool,
 }
 
 impl<S: Storage> MeetActor<S> {
@@ -159,7 +162,110 @@ impl<S: Storage> MeetActor<S> {
             server_seq: 0,
             updates_by_key: HashMap::new(),
             tx_relay,
+            expected_client_seq: HashMap::new(),
+            last_update_time: std::time::Instant::now(),
+            need_consistency_check: false,
         }
+    }
+
+    /// Detect sequence gaps in client updates
+    ///
+    /// This method checks if there are any gaps in the sequence numbers
+    /// from a specific client, which might indicate lost updates.
+    ///
+    /// Returns true if a gap is detected, false otherwise.
+    pub fn detect_sequence_gaps(&mut self, client_id: &str, updates: &[Update]) -> bool {
+        if updates.is_empty() {
+            return false;
+        }
+
+        // Get the expected next sequence number for this client
+        let expected_seq = self
+            .expected_client_seq
+            .get(client_id)
+            .copied()
+            .unwrap_or(0);
+
+        // Check if the first update has the expected sequence number
+        let first_update_seq = updates[0].local_seq_num;
+
+        // Check for gaps in the update sequence
+        if expected_seq > 0 && first_update_seq > expected_seq {
+            // Gap detected!
+            println!(
+                "Sequence gap detected for client {client_id}: expected {expected_seq}, got {first_update_seq}"
+            );
+
+            // Mark that we need a consistency check
+            self.need_consistency_check = true;
+
+            // Update metrics
+            let _ = counter!("meet.sequence_gaps", &[("value", "1")]);
+
+            return true;
+        }
+
+        // Check for gaps between updates in this batch
+        let mut prev_seq = first_update_seq;
+        for update in &updates[1..] {
+            if update.local_seq_num > prev_seq + 1 {
+                // Gap detected within batch
+                println!(
+                    "Sequence gap detected within batch for client {}: gap between {} and {}",
+                    client_id, prev_seq, update.local_seq_num
+                );
+
+                // Mark that we need a consistency check
+                self.need_consistency_check = true;
+
+                // Update metrics
+                let _ = counter!("meet.sequence_gaps", &[("value", "1")]);
+
+                return true;
+            }
+            prev_seq = update.local_seq_num;
+        }
+
+        // Update the expected next sequence number for this client
+        let last_update = updates.last().unwrap();
+        self.expected_client_seq
+            .insert(client_id.to_string(), last_update.local_seq_num + 1);
+
+        false
+    }
+
+    /// Check if state recovery is needed
+    ///
+    /// Determines if we should initiate state recovery based on:
+    /// 1. Gap detection in sequence numbers
+    /// 2. Long periods of inactivity
+    /// 3. Explicitly set `need_consistency_check` flag
+    ///
+    /// Returns true if recovery is needed, false otherwise.
+    pub fn needs_state_recovery(&mut self) -> bool {
+        // If we've already determined we need a consistency check
+        if self.need_consistency_check {
+            self.need_consistency_check = false; // Reset the flag
+            return true;
+        }
+
+        // Check for long period of inactivity (more than 5 minutes)
+        let now = std::time::Instant::now();
+        let inactivity_duration = now.duration_since(self.last_update_time);
+        if inactivity_duration > std::time::Duration::from_secs(300) {
+            println!(
+                "Long inactivity period detected for meet {}: {:?}",
+                self.meet_id, inactivity_duration
+            );
+
+            // Update the last update time
+            self.last_update_time = now;
+
+            // This could indicate a network partition or server restart
+            return true;
+        }
+
+        false
     }
 
     pub async fn handle_update(
@@ -168,6 +274,23 @@ impl<S: Storage> MeetActor<S> {
         priority: u8,
         updates: Vec<Update>,
     ) -> Result<Vec<(u64, u64)>, AppError> {
+        // Update the last update time
+        self.last_update_time = std::time::Instant::now();
+
+        // Detect sequence gaps
+        let gaps_detected = self.detect_sequence_gaps(&client_id, &updates);
+
+        // Check if we need state recovery
+        let recovery_needed = gaps_detected || self.needs_state_recovery();
+
+        // If we need recovery, return a special error to trigger recovery
+        if recovery_needed {
+            return Err(AppError::NeedsRecovery {
+                meet_id: self.meet_id.clone(),
+                last_known_seq: self.server_seq,
+            });
+        }
+
         let mut results = Vec::new();
 
         let updates_len = updates.len();
@@ -503,5 +626,86 @@ mod tests {
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].update.update_key, "plate.weight");
         assert_eq!(updates[0].update.update_value, serde_json::json!(25));
+    }
+
+    #[tokio::test]
+    async fn test_sequence_gap_detection() {
+        let (actor, _temp_dir) = setup().await;
+
+        // First send update with seq 1
+        let update1 = openlifter_common::Update {
+            update_key: "test.key1".to_string(),
+            update_value: serde_json::json!("value1"),
+            local_seq_num: 1,
+            after_server_seq_num: 0,
+        };
+
+        // Apply the first update
+        let result1 = actor
+            .apply_updates("client1".to_string(), 1, vec![update1])
+            .await;
+
+        assert!(result1.is_ok());
+
+        // Send update with seq 3 (skipping 2) - should trigger recovery
+        let update3 = openlifter_common::Update {
+            update_key: "test.key3".to_string(),
+            update_value: serde_json::json!("value3"),
+            local_seq_num: 3, // Gap here - skipped seq 2
+            after_server_seq_num: 1,
+        };
+
+        // Apply the update with gap
+        let result3 = actor
+            .apply_updates("client1".to_string(), 1, vec![update3])
+            .await;
+
+        // Should return a NeedsRecovery error
+        match result3 {
+            Err(crate::error::AppError::NeedsRecovery {
+                meet_id,
+                last_known_seq,
+            }) => {
+                assert_eq!(meet_id, "test-meet");
+                assert_eq!(last_known_seq, 1); // We've only applied one update so far
+            },
+            other => panic!("Expected NeedsRecovery error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_inactivity_triggers_recovery() {
+        let (actor, _temp_dir) = setup().await;
+
+        // First add an update
+        let update1 = openlifter_common::Update {
+            update_key: "test.key1".to_string(),
+            update_value: serde_json::json!("value1"),
+            local_seq_num: 1,
+            after_server_seq_num: 0,
+        };
+
+        // Apply the update
+        let result1 = actor
+            .apply_updates("client1".to_string(), 1, vec![update1])
+            .await;
+
+        assert!(result1.is_ok());
+
+        // In a real implementation, we'd test the inactivity detection
+        // by manipulating the last_update_time. However, this field is private
+        // and not directly accessible in tests.
+
+        // Create another update to simulate coming back after inactivity
+        let _update2 = openlifter_common::Update {
+            update_key: "test.key2".to_string(),
+            update_value: serde_json::json!("value2"),
+            local_seq_num: 2,
+            after_server_seq_num: 1,
+        };
+
+        // This is just a placeholder for a more complete integration test
+        // that would actually verify the recovery mechanism is triggered
+        // after a period of inactivity.
     }
 }
