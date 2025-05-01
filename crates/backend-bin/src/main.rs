@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let storage = FlatFileStorage::new("data")?;
 
     // Create application state
-    let state = Arc::new(AppState::new(storage, &config)?);
+    let state = Arc::new(AppState::new(storage, &config).await?);
 
     // Setup a background task for session cleanup
     let state_clone = state.clone();

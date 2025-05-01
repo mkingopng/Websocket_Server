@@ -1,4 +1,8 @@
-use crate::auth::{AuthRateLimiter, AuthService, SessionManager};
+// ==========
+// crates/backend-lib/src/auth/service_impl.rs
+// ===========
+//! Authentication service implementation
+use crate::auth::{AuthRateLimiter, AuthService, PersistentSessionManager};
 use crate::error::AppError;
 use crate::messages::Session;
 use async_trait::async_trait;
@@ -7,19 +11,22 @@ use std::net::IpAddr;
 use std::sync::Arc;
 
 pub struct DefaultAuth {
-    sm: SessionManager,
+    sm: PersistentSessionManager,
     rate_limiter: Arc<AuthRateLimiter>,
 }
 
 impl DefaultAuth {
-    pub fn new(sm: SessionManager) -> Self {
+    pub fn new(sm: PersistentSessionManager) -> Self {
         Self {
             sm,
             rate_limiter: Arc::new(AuthRateLimiter::default()),
         }
     }
 
-    pub fn new_with_rate_limiter(sm: SessionManager, rate_limiter: Arc<AuthRateLimiter>) -> Self {
+    pub fn new_with_rate_limiter(
+        sm: PersistentSessionManager,
+        rate_limiter: Arc<AuthRateLimiter>,
+    ) -> Self {
         Self { sm, rate_limiter }
     }
 

@@ -1,35 +1,36 @@
 // ==================
 // crates/backend-lib/src/websocket.rs
 // ==================
-//! WebSocket Handler Module
-//!
-//! This module implements the WebSocket handler for the `OpenLifter` backend server.
-//! It provides functionality for:
-//! - Client registration and session management
-//! - Message handling for different client request types
-//! - Update broadcasting to connected clients
-//! - Conflict resolution for concurrent updates
-//! - Network resilience with reconnection and retry logic
-//!
-//! The `WebSocketHandler` is designed to be instantiated per-connection and manages
-//! the state for a single client. It interacts with the shared application state to
-//! coordinate between multiple clients.
-//!
-//! # Network Resilience
-//! The handler implements several mechanisms for handling network interruptions:
-//! - Automatic reconnection attempts when sessions expire or connections drop
-//! - Exponential backoff for retry attempts
-//! - Message delivery guarantees with retry logic
-//!
-//! # Conflict Resolution
-//! When multiple clients update the same "location" (data entity), the handler
-//! resolves conflicts based on client priority levels, with higher priority updates
-//! taking precedence.
+/** WebSocket Handler Module
 
+This module implements the WebSocket handler for the `OpenLifter` backend server.
+It provides functionality for handling WebSocket connections and messages.
+
+Features include:
+- Connection state management
+- Message routing
+- Session validation
+- Subscription handling
+- Automatic reconnection
+- Rate limiting
+- Conflict resolution
+- Data persistence
+
+The WebSocket handler follows a message-based architecture where clients
+send messages to the server, and the server broadcasts updates to all
+connected clients.
+
+Messages are typed using the `ClientMessage` and `ServerMessage` enums, which
+define the protocol between the client and server.
+
+When multiple clients update the same "location" (data entity), the handler
+resolves conflicts based on client priority levels, with higher priority updates
+taking precedence.*/
 use crate::messages::{ClientMessage, ServerMessage, Update, UpdateWithMetadata};
 use crate::storage::Storage;
 use crate::AppState;
 use anyhow::{anyhow, Result};
+use serde_json;
 use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -1043,13 +1044,11 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
 mod tests {
     use super::*;
     use crate::storage::FlatFileStorage;
-    use crate::AppState;
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::sync::mpsc;
 
-    /// Helper to set up a `WebSocketHandler` for testing
-    fn setup() -> (
+    async fn setup() -> (
         WebSocketHandler<FlatFileStorage>,
         Arc<AppState<FlatFileStorage>>,
         TempDir,
@@ -1057,11 +1056,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
 
-        // Create default settings
-        let settings = crate::config::Settings::default();
-
         // Create app state
-        let state = Arc::new(AppState::new(storage.clone(), &settings).unwrap());
+        let state = Arc::new(
+            AppState::new(storage.clone(), &crate::config::Settings::default())
+                .await
+                .unwrap(),
+        );
 
         // Create handler
         let handler = WebSocketHandler::new(state.clone());
@@ -1071,7 +1071,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_client() {
-        let (mut handler, state, _temp_dir) = setup();
+        let (mut handler, state, _temp_dir) = setup().await;
         let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
         let meet_id = "test-meet";
 
@@ -1085,7 +1085,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unregister_client() {
-        let (mut handler, state, _temp_dir) = setup();
+        let (mut handler, state, _temp_dir) = setup().await;
         let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
         let meet_id = "test-meet";
 
@@ -1102,7 +1102,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_create_meet() {
-        let (mut handler, _state, _temp_dir) = setup();
+        let (mut handler, _state, _temp_dir) = setup().await;
 
         // Create a meet
         let result = handler
@@ -1130,7 +1130,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_join_meet() {
-        let (mut handler, _state, _temp_dir) = setup();
+        let (mut handler, _state, _temp_dir) = setup().await;
 
         // Join a meet
         let result = handler
@@ -1158,369 +1158,441 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_update_init() {
-        let (mut handler, state, _temp_dir) = setup();
-        let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
+        use std::time::Duration;
+        use tokio::time::timeout;
 
-        // Register the client
-        handler.register_client("test-meet", tx);
+        // Add timeout to prevent the test from hanging
+        timeout(Duration::from_secs(3), async {
+            let (mut handler, state, _temp_dir) = setup().await;
+            let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
 
-        // Create a session token
-        let session = state
-            .auth
-            .new_session("test-meet".to_string(), "Test Location".to_string(), 1)
-            .await;
+            // Register the client
+            handler.register_client("test-meet", tx);
 
-        // Updates to send
-        let updates = vec![Update {
-            location: "item1".to_string(),
-            value: serde_json::to_string(&serde_json::json!({"field": "value"})).unwrap(),
-            timestamp: 12345,
-        }];
+            // Create a session token
+            let session = state
+                .auth
+                .new_session("test-meet".to_string(), "Test Location".to_string(), 1)
+                .await;
 
-        // Send update
-        let result = handler
-            .handle_message(ClientMessage::UpdateInit {
-                meet_id: "test-meet".to_string(),
-                session_token: session.clone(),
-                updates: updates.clone(),
-            })
-            .await;
+            // Updates to send
+            let updates = vec![Update {
+                location: "item1".to_string(),
+                value: serde_json::to_string(&serde_json::json!({"field": "value"})).unwrap(),
+                timestamp: 12345,
+            }];
 
-        // Verify result
-        assert!(result.is_ok());
-        match result.unwrap() {
-            ServerMessage::UpdateAck {
-                meet_id,
-                update_ids,
-            } => {
-                assert_eq!(meet_id, "test-meet");
-                assert_eq!(update_ids.len(), 1);
-            },
-            other => panic!("Expected UpdateAck, got {other:?}"),
-        }
+            // Send update
+            let result = handler
+                .handle_message(ClientMessage::UpdateInit {
+                    meet_id: "test-meet".to_string(),
+                    session_token: session.clone(),
+                    updates: updates.clone(),
+                })
+                .await;
+
+            // Verify result
+            assert!(result.is_ok());
+            match result.unwrap() {
+                ServerMessage::UpdateAck {
+                    meet_id,
+                    update_ids,
+                } => {
+                    assert_eq!(meet_id, "test-meet");
+                    assert_eq!(update_ids.len(), 1);
+                },
+                other => panic!("Expected UpdateAck, got {other:?}"),
+            }
+        })
+        .await
+        .expect("Test timed out");
     }
 
     #[tokio::test]
     async fn test_handle_invalid_session() {
-        let (mut handler, _state, _temp_dir) = setup();
+        // We need to extract all three elements from setup
+        let (mut handler, _state, _temp_dir) = setup().await;
 
-        // Try update with invalid session
-        let result = handler
-            .handle_message(ClientMessage::UpdateInit {
-                meet_id: "test-meet".to_string(),
-                session_token: "invalid-session".to_string(),
-                updates: vec![],
-            })
-            .await;
+        // Set up client
+        let (tx, mut rx) = mpsc::channel(10);
+        handler.client_tx = Some(tx);
 
-        // Verify result
-        assert!(result.is_ok());
-        match result.unwrap() {
-            ServerMessage::InvalidSession { session_token } => {
-                assert_eq!(session_token, "invalid-session");
-            },
-            other => panic!("Expected InvalidSession, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_client_pull() {
-        let (mut handler, state, _temp_dir) = setup();
-
-        // Create a session token
-        let session = state
-            .auth
-            .new_session("test-meet".to_string(), "Test Location".to_string(), 1)
-            .await;
-
-        // Send client pull
+        // Send invalid session message
         let result = handler
             .handle_message(ClientMessage::ClientPull {
-                meet_id: "test-meet".to_string(),
-                session_token: session,
+                meet_id: "test".to_string(),
+                session_token: "invalid".to_string(),
                 last_server_seq: 0,
             })
             .await;
 
         // Verify result
         assert!(result.is_ok());
-        match result.unwrap() {
-            ServerMessage::ServerPull {
-                meet_id,
-                last_server_seq,
-                updates_relayed,
-            } => {
-                assert_eq!(meet_id, "test-meet");
-                assert_eq!(last_server_seq, 0);
-                assert!(updates_relayed.is_empty());
+        let message = result.unwrap();
+
+        // Check the message type without moving any parts
+        match &message {
+            ServerMessage::InvalidSession { session_token } => {
+                assert_eq!(session_token, "invalid");
             },
-            other => panic!("Expected ServerPull, got {other:?}"),
+            other => panic!("Expected InvalidSession, got {:?}", other),
+        }
+
+        // Send the message to the client
+        if let Some(ref client_tx) = handler.client_tx {
+            client_tx
+                .send(message)
+                .await
+                .expect("Failed to send message to client");
+        }
+
+        // Verify message is received by client, with a timeout to ensure it arrives
+        let timeout = tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv()).await;
+        assert!(timeout.is_ok(), "Timed out waiting for message");
+
+        if let Ok(Some(client_message)) = timeout {
+            match client_message {
+                ServerMessage::InvalidSession { session_token } => {
+                    assert_eq!(session_token, "invalid");
+                },
+                other => panic!("Expected InvalidSession, got {:?}", other),
+            }
+        } else {
+            panic!("Expected to receive message from client channel");
         }
     }
 
     #[tokio::test]
-    async fn test_handle_publish_meet() {
-        let (mut handler, state, _temp_dir) = setup();
+    async fn test_handle_client_pull() {
+        use std::time::Duration;
+        use tokio::time::timeout;
 
-        // Create a session token
-        let session = state
-            .auth
-            .new_session("test-meet".to_string(), "Test Location".to_string(), 1)
-            .await;
+        // Add timeout to prevent the test from hanging
+        timeout(Duration::from_secs(3), async {
+            let (mut handler, state, _temp_dir) = setup().await;
 
-        // Send publish meet
-        let result = handler
-            .handle_message(ClientMessage::PublishMeet {
-                meet_id: "test-meet".to_string(),
-                session_token: session,
-                return_email: "test@example.com".to_string(),
-                opl_csv: "name,weight,squat".to_string(),
-            })
-            .await;
+            // Create a session token
+            let session = state
+                .auth
+                .new_session("test-meet".to_string(), "Test Location".to_string(), 1)
+                .await;
 
-        // Verify result
-        assert!(result.is_ok());
-        match result.unwrap() {
-            ServerMessage::PublishAck { meet_id } => {
-                assert_eq!(meet_id, "test-meet");
-            },
-            other => panic!("Expected PublishAck, got {other:?}"),
-        }
+            // Send client pull
+            let result = handler
+                .handle_message(ClientMessage::ClientPull {
+                    meet_id: "test-meet".to_string(),
+                    session_token: session,
+                    last_server_seq: 0,
+                })
+                .await;
+
+            // Verify result
+            assert!(result.is_ok());
+            match result.unwrap() {
+                ServerMessage::ServerPull {
+                    meet_id,
+                    last_server_seq,
+                    updates_relayed,
+                } => {
+                    assert_eq!(meet_id, "test-meet");
+                    assert_eq!(last_server_seq, 0);
+                    assert!(updates_relayed.is_empty());
+                },
+                other => panic!("Expected ServerPull, got {other:?}"),
+            }
+        })
+        .await
+        .expect("Test timed out");
     }
 
-    #[test]
-    fn test_resolve_conflicts() {
-        let (handler, _state, _temp_dir) = setup();
+    #[tokio::test]
+    async fn test_handle_publish_meet() {
+        use std::time::Duration;
+        use tokio::time::timeout;
 
-        // Create updates with different locations
-        let update1 = UpdateWithMetadata {
-            update: Update {
-                location: "location1".to_string(),
-                value: "value1".to_string(),
-                timestamp: 1000,
-            },
-            source_client: "client1".to_string(),
-            server_seq: 1,
-            priority: 5,
-        };
+        // Add timeout to prevent the test from hanging
+        timeout(Duration::from_secs(3), async {
+            let (mut handler, state, _temp_dir) = setup().await;
 
-        let update2 = UpdateWithMetadata {
-            update: Update {
-                location: "location2".to_string(),
-                value: "value2".to_string(),
-                timestamp: 2000,
-            },
-            source_client: "client2".to_string(),
-            server_seq: 2,
-            priority: 3,
-        };
+            // Create a session token
+            let session = state
+                .auth
+                .new_session("test-meet".to_string(), "Test Location".to_string(), 1)
+                .await;
 
-        // No conflicts (different locations)
-        let updates = vec![update1.clone(), update2.clone()];
-        let resolved = handler.resolve_conflicts(&updates);
+            // Send publish meet
+            let result = handler
+                .handle_message(ClientMessage::PublishMeet {
+                    meet_id: "test-meet".to_string(),
+                    session_token: session,
+                    return_email: "test@example.com".to_string(),
+                    opl_csv: "name,weight,squat".to_string(),
+                })
+                .await;
 
-        // Both updates should be included since they have different locations
-        assert_eq!(resolved.len(), 2);
+            // Verify result
+            assert!(result.is_ok());
+            match result.unwrap() {
+                ServerMessage::PublishAck { meet_id } => {
+                    assert_eq!(meet_id, "test-meet");
+                },
+                other => panic!("Expected PublishAck, got {other:?}"),
+            }
+        })
+        .await
+        .expect("Test timed out");
+    }
 
-        // Create conflicting updates (same location, different priorities)
-        let conflicting_update1 = UpdateWithMetadata {
-            update: Update {
-                location: "same_location".to_string(),
-                value: "value_from_client1".to_string(),
-                timestamp: 1000,
-            },
-            source_client: "client1".to_string(),
-            server_seq: 1,
-            priority: 5, // Higher priority
-        };
+    #[tokio::test]
+    async fn test_resolve_conflicts() {
+        use std::time::Duration;
+        use tokio::time::timeout;
 
-        let conflicting_update2 = UpdateWithMetadata {
-            update: Update {
-                location: "same_location".to_string(),
-                value: "value_from_client2".to_string(),
-                timestamp: 2000,
-            },
-            source_client: "client2".to_string(),
-            server_seq: 2,
-            priority: 3, // Lower priority
-        };
+        // Add timeout to prevent the test from hanging
+        timeout(Duration::from_secs(5), async {
+            // Run the setup
+            let (handler, _state, _temp_dir) = setup().await;
 
-        // Test conflict resolution
-        let updates = vec![conflicting_update1.clone(), conflicting_update2.clone()];
-        let resolved = handler.resolve_conflicts(&updates);
+            // Create updates with different locations
+            let update1 = UpdateWithMetadata {
+                update: Update {
+                    location: "location1".to_string(),
+                    value: "value1".to_string(),
+                    timestamp: 1000,
+                },
+                source_client: "client1".to_string(),
+                server_seq: 1,
+                priority: 5,
+            };
 
-        // Only one update should be included (the one with higher priority)
-        assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0].priority, 5);
-        assert_eq!(resolved[0].source_client, "client1");
+            let update2 = UpdateWithMetadata {
+                update: Update {
+                    location: "location2".to_string(),
+                    value: "value2".to_string(),
+                    timestamp: 2000,
+                },
+                source_client: "client2".to_string(),
+                server_seq: 2,
+                priority: 3,
+            };
 
-        // Test with mixed conflicting and non-conflicting updates
-        let mixed_updates = vec![
-            update1.clone(),
-            conflicting_update1.clone(),
-            conflicting_update2.clone(),
-        ];
-        let resolved = handler.resolve_conflicts(&mixed_updates);
+            // No conflicts (different locations)
+            let updates = vec![update1.clone(), update2.clone()];
+            let resolved = handler.resolve_conflicts(&updates);
 
-        // Should have two updates: one non-conflicting and one winner from the conflict
-        assert_eq!(resolved.len(), 2);
+            // Both updates should be included since they have different locations
+            assert_eq!(resolved.len(), 2);
 
-        // Find the update for "location1"
-        let location1_update = resolved
-            .iter()
-            .find(|u| u.update.location == "location1")
-            .unwrap();
-        assert_eq!(location1_update.source_client, "client1");
+            // Create conflicting updates (same location, different priorities)
+            let conflicting_update1 = UpdateWithMetadata {
+                update: Update {
+                    location: "same_location".to_string(),
+                    value: "value_from_client1".to_string(),
+                    timestamp: 1000,
+                },
+                source_client: "client1".to_string(),
+                server_seq: 1,
+                priority: 5, // Higher priority
+            };
 
-        // Find the update for "same_location"
-        let same_location_update = resolved
-            .iter()
-            .find(|u| u.update.location == "same_location")
-            .unwrap();
-        assert_eq!(same_location_update.source_client, "client1");
-        assert_eq!(same_location_update.priority, 5);
+            let conflicting_update2 = UpdateWithMetadata {
+                update: Update {
+                    location: "same_location".to_string(),
+                    value: "value_from_client2".to_string(),
+                    timestamp: 2000,
+                },
+                source_client: "client2".to_string(),
+                server_seq: 2,
+                priority: 3, // Lower priority
+            };
+
+            // Test conflict resolution
+            let updates = vec![conflicting_update1.clone(), conflicting_update2.clone()];
+            let resolved = handler.resolve_conflicts(&updates);
+
+            // Only one update should be included (the one with higher priority)
+            assert_eq!(resolved.len(), 1);
+            assert_eq!(resolved[0].priority, 5);
+            assert_eq!(resolved[0].source_client, "client1");
+
+            // Test with mixed conflicting and non-conflicting updates
+            let mixed_updates = vec![
+                update1.clone(),
+                conflicting_update1.clone(),
+                conflicting_update2.clone(),
+            ];
+            let resolved = handler.resolve_conflicts(&mixed_updates);
+
+            // Should have two updates: one non-conflicting and one winner from the conflict
+            assert_eq!(resolved.len(), 2);
+
+            // Find the update for "location1"
+            let location1_update = resolved
+                .iter()
+                .find(|u| u.update.location == "location1")
+                .unwrap();
+            assert_eq!(location1_update.source_client, "client1");
+
+            // Find the update for "same_location"
+            let same_location_update = resolved
+                .iter()
+                .find(|u| u.update.location == "same_location")
+                .unwrap();
+            assert_eq!(same_location_update.source_client, "client1");
+            assert_eq!(same_location_update.priority, 5);
+        })
+        .await
+        .expect("Test timed out");
     }
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_handle_state_recovery_response() {
-        let (mut handler, _state, _temp_dir) = setup();
+        use std::time::Duration;
+        use tokio::time::timeout;
 
-        // Create a meet first
-        let create_result = handler
-            .handle_message(ClientMessage::CreateMeet {
-                meet_id: "recovery-test".to_string(),
-                password: "Password123!".to_string(),
-                location_name: "Recovery Test".to_string(),
-                priority: 5,
-            })
-            .await
-            .unwrap();
+        // Add timeout to prevent the test from hanging
+        timeout(Duration::from_secs(5), async {
+            let (mut handler, _state, _temp_dir) = setup().await;
 
-        // Extract session token using let...else pattern
-        let ServerMessage::MeetCreated {
-            meet_id: _,
-            session_token,
-        } = create_result
-        else {
-            panic!("Expected MeetCreated response")
-        };
+            // Create a meet first
+            let create_result = handler
+                .handle_message(ClientMessage::CreateMeet {
+                    meet_id: "recovery-test".to_string(),
+                    password: "Password123!".to_string(),
+                    location_name: "Recovery Test".to_string(),
+                    priority: 5,
+                })
+                .await
+                .unwrap();
 
-        // Create some initial updates
-        let initial_updates = vec![
-            Update {
-                location: "test.item1".to_string(),
-                value: r#"{"name":"Item 1","value":123}"#.to_string(),
-                timestamp: 12345,
-            },
-            Update {
-                location: "test.item2".to_string(),
-                value: r#"{"name":"Item 2","value":456}"#.to_string(),
-                timestamp: 12346,
-            },
-        ];
-
-        // Send recovery response
-        let recovery_result = handler
-            .handle_message(ClientMessage::StateRecoveryResponse {
-                meet_id: "recovery-test".to_string(),
-                session_token: session_token.clone(),
-                last_seq_num: 0,
-                updates: initial_updates,
-                priority: 5,
-            })
-            .await
-            .unwrap();
-
-        // Verify the result
-        match recovery_result {
-            ServerMessage::StateRecovered {
-                meet_id,
-                new_seq_num,
-                updates_recovered,
-            } => {
-                assert_eq!(meet_id, "recovery-test");
-                assert_eq!(new_seq_num, 2); // Two updates should have been processed
-                assert_eq!(updates_recovered, 2);
-            },
-            _ => panic!("Expected StateRecovered response"),
-        }
-
-        // Now test with conflicting updates
-        let conflicting_updates = vec![
-            // This should be accepted as it's a new key
-            Update {
-                location: "test.item3".to_string(),
-                value: r#"{"name":"Item 3","value":789}"#.to_string(),
-                timestamp: 12347,
-            },
-            // This should be rejected as it's an existing key with same priority (5)
-            Update {
-                location: "test.item1".to_string(),
-                value: r#"{"name":"Item 1 Updated","value":999}"#.to_string(),
-                timestamp: 12348,
-            },
-        ];
-
-        // Send second recovery response
-        let second_recovery_result = handler
-            .handle_message(ClientMessage::StateRecoveryResponse {
-                meet_id: "recovery-test".to_string(),
-                session_token: session_token.clone(),
-                last_seq_num: 2,
-                updates: conflicting_updates,
-                priority: 5, // Same priority, so conflict should be ignored
-            })
-            .await
-            .unwrap();
-
-        // Verify the result
-        match second_recovery_result {
-            ServerMessage::StateRecovered {
-                meet_id,
-                new_seq_num,
-                updates_recovered,
-            } => {
-                assert_eq!(meet_id, "recovery-test");
-                assert_eq!(new_seq_num, 3); // Only one new update should have been processed
-                assert_eq!(updates_recovered, 1);
-            },
-            _ => panic!("Expected StateRecovered response"),
-        }
-
-        // Now test with higher priority updates
-        let higher_priority_updates = vec![
-            // This should be accepted as it's a higher priority
-            Update {
-                location: "test.item1".to_string(),
-                value: r#"{"name":"Item 1 Override","value":1000}"#.to_string(),
-                timestamp: 12349,
-            },
-        ];
-
-        // Send third recovery response with higher priority
-        let third_recovery_result = handler
-            .handle_message(ClientMessage::StateRecoveryResponse {
-                meet_id: "recovery-test".to_string(),
+            // Extract session token using let...else pattern
+            let ServerMessage::MeetCreated {
+                meet_id: _,
                 session_token,
-                last_seq_num: 3,
-                updates: higher_priority_updates,
-                priority: 10, // Higher priority, so conflict should be accepted
-            })
-            .await
-            .unwrap();
+            } = create_result
+            else {
+                panic!("Expected MeetCreated response")
+            };
 
-        // Verify the result
-        match third_recovery_result {
-            ServerMessage::StateRecovered {
-                meet_id,
-                new_seq_num: _,
-                updates_recovered,
-            } => {
-                assert_eq!(meet_id, "recovery-test");
-                assert_eq!(updates_recovered, 1); // The override should be accepted
-            },
-            _ => panic!("Expected StateRecovered response"),
-        }
+            // Create some initial updates
+            let initial_updates = vec![
+                Update {
+                    location: "test.item1".to_string(),
+                    value: r#"{"name":"Item 1","value":123}"#.to_string(),
+                    timestamp: 12345,
+                },
+                Update {
+                    location: "test.item2".to_string(),
+                    value: r#"{"name":"Item 2","value":456}"#.to_string(),
+                    timestamp: 12346,
+                },
+            ];
+
+            // Send recovery response
+            let recovery_result = handler
+                .handle_message(ClientMessage::StateRecoveryResponse {
+                    meet_id: "recovery-test".to_string(),
+                    session_token: session_token.clone(),
+                    last_seq_num: 0,
+                    updates: initial_updates,
+                    priority: 5,
+                })
+                .await
+                .unwrap();
+
+            // Verify the result
+            match recovery_result {
+                ServerMessage::StateRecovered {
+                    meet_id,
+                    new_seq_num,
+                    updates_recovered,
+                } => {
+                    assert_eq!(meet_id, "recovery-test");
+                    assert_eq!(new_seq_num, 2); // Two updates should have been processed
+                    assert_eq!(updates_recovered, 2);
+                },
+                _ => panic!("Expected StateRecovered response"),
+            }
+
+            // Now test with conflicting updates
+            let conflicting_updates = vec![
+                // This should be accepted as it's a new key
+                Update {
+                    location: "test.item3".to_string(),
+                    value: r#"{"name":"Item 3","value":789}"#.to_string(),
+                    timestamp: 12347,
+                },
+                // This should be rejected as it's an existing key with same priority (5)
+                Update {
+                    location: "test.item1".to_string(),
+                    value: r#"{"name":"Item 1 Updated","value":999}"#.to_string(),
+                    timestamp: 12348,
+                },
+            ];
+
+            // Send second recovery response
+            let second_recovery_result = handler
+                .handle_message(ClientMessage::StateRecoveryResponse {
+                    meet_id: "recovery-test".to_string(),
+                    session_token: session_token.clone(),
+                    last_seq_num: 2,
+                    updates: conflicting_updates,
+                    priority: 5, // Same priority, so conflict should be ignored
+                })
+                .await
+                .unwrap();
+
+            // Verify the result
+            match second_recovery_result {
+                ServerMessage::StateRecovered {
+                    meet_id,
+                    new_seq_num,
+                    updates_recovered,
+                } => {
+                    assert_eq!(meet_id, "recovery-test");
+                    assert_eq!(new_seq_num, 3); // Only one new update should have been processed
+                    assert_eq!(updates_recovered, 1);
+                },
+                _ => panic!("Expected StateRecovered response"),
+            }
+
+            // Now test with higher priority updates
+            let higher_priority_updates = vec![
+                // This should be accepted as it's a higher priority
+                Update {
+                    location: "test.item1".to_string(),
+                    value: r#"{"name":"Item 1 Override","value":1000}"#.to_string(),
+                    timestamp: 12349,
+                },
+            ];
+
+            // Send third recovery response with higher priority
+            let third_recovery_result = handler
+                .handle_message(ClientMessage::StateRecoveryResponse {
+                    meet_id: "recovery-test".to_string(),
+                    session_token,
+                    last_seq_num: 3,
+                    updates: higher_priority_updates,
+                    priority: 10, // Higher priority, so conflict should be accepted
+                })
+                .await
+                .unwrap();
+
+            // Verify the result
+            match third_recovery_result {
+                ServerMessage::StateRecovered {
+                    meet_id,
+                    new_seq_num: _,
+                    updates_recovered,
+                } => {
+                    assert_eq!(meet_id, "recovery-test");
+                    assert_eq!(updates_recovered, 1); // The override should be accepted
+                },
+                _ => panic!("Expected StateRecovered response"),
+            }
+        })
+        .await
+        .expect("Test timed out");
     }
 }

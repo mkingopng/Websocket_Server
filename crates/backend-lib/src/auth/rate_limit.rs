@@ -83,10 +83,31 @@ impl AuthRateLimiter {
         // Check if we need to lock out
         if entry.failed_attempts >= self.max_attempts {
             entry.is_locked_out = true;
-            entry.lockout_expiry = Some(now + self.lockout_duration);
 
-            // Log the lockout
-            println!("IP {ip} locked out for authentication attempts");
+            // Calculate exponential backoff with a cap
+            let base_secs = self.lockout_duration.as_secs();
+            let attempts_over_max = entry.failed_attempts.saturating_sub(self.max_attempts);
+            let backoff_factor = if attempts_over_max > 0 {
+                // Use 2^x backoff but cap at 6 to prevent overflow (2^6 = 64x multiplier)
+                2u64.pow(attempts_over_max.min(6) as u32)
+            } else {
+                1
+            };
+
+            let lockout_secs = base_secs.saturating_mul(backoff_factor);
+            let lockout_duration = Duration::from_secs(lockout_secs);
+
+            entry.lockout_expiry = Some(now + lockout_duration);
+
+            // Log the lockout with severity based on attempts
+            if attempts_over_max > 0 {
+                println!(
+                    "SECURITY WARNING: IP {} locked out for {} seconds after {} failed attempts",
+                    ip, lockout_secs, entry.failed_attempts
+                );
+            } else {
+                println!("IP {} locked out for {} seconds", ip, lockout_secs);
+            }
         }
     }
 

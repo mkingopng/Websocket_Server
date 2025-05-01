@@ -238,9 +238,9 @@ impl Storage for FlatFileStorage {
         Ok(meet_info)
     }
 
-    /// Store meet CSV data and return email
-    /// The CSV data is stored in meet.csv and the return email in return-email.txt.
-    /// Both files are written atomically using temporary files.
+    /** Store meet CSV data and return email
+    The CSV data is stored in meet.csv and the return email in return-email.txt.
+    Both files are written atomically using temporary files. */
     async fn store_meet_csv(
         &self,
         meet_id: &str,

@@ -14,20 +14,28 @@ use tempfile::TempDir;
 use tokio::sync::mpsc;
 
 /// Helper to set up a test environment
-fn setup() -> (
+#[allow(dead_code)]
+async fn setup_test_env() -> (
+    Arc<AppState<backend_lib::storage::FlatFileStorage>>,
+    TempDir,
+) {
+    let temp_dir = TempDir::new().unwrap();
+    let storage = backend_lib::storage::FlatFileStorage::new(temp_dir.path()).unwrap();
+    let settings = Settings::default();
+    let state = Arc::new(AppState::new(storage.clone(), &settings).await.unwrap());
+    (state, temp_dir)
+}
+
+/// Helper to set up a test environment for `WebSocketHandler`
+async fn setup() -> (
     WebSocketHandler<backend_lib::storage::FlatFileStorage>,
     TempDir,
 ) {
     let temp_dir = TempDir::new().unwrap();
     let storage = backend_lib::storage::FlatFileStorage::new(temp_dir.path()).unwrap();
-
-    // Create app state
     let settings = Settings::default();
-    let state = Arc::new(AppState::new(storage.clone(), &settings).unwrap());
-
-    // Create handler
+    let state = Arc::new(AppState::new(storage.clone(), &settings).await.unwrap());
     let handler = WebSocketHandler::new(state);
-
     (handler, temp_dir)
 }
 
@@ -157,7 +165,7 @@ async fn test_complete_flow() {
 #[tokio::test]
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_invalid_session() {
-    let (mut handler, _temp_dir) = setup();
+    let (mut handler, _temp_dir) = setup().await;
     let meet_id = "test-invalid-session";
 
     // Send message with invalid session
@@ -293,7 +301,7 @@ async fn test_broadcast_and_client_communication() {
 #[tokio::test]
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_reconnection_and_retry() {
-    let (mut handler, _temp_dir) = setup();
+    let (mut handler, _temp_dir) = setup().await;
     let meet_id = "test-reconnect-meet";
     let password = "ReconnectTest123!";
 
@@ -789,7 +797,7 @@ pub mod tests {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
         let settings = backend_lib::config::Settings::default();
-        let state = Arc::new(AppState::new(storage.clone(), &settings).unwrap());
+        let state = Arc::new(AppState::new(storage.clone(), &settings).await.unwrap());
 
         // Create router
         let app = create_router(state.clone());

@@ -27,7 +27,9 @@ mod tests {
         let settings = Settings::default();
 
         // Create test state
-        let state = AppState::new(FlatFileStorage::new("test_data").unwrap(), &settings).unwrap();
+        let state = AppState::new(FlatFileStorage::new("test_data").unwrap(), &settings)
+            .await
+            .unwrap();
 
         // Create test router without middleware for now
         let app = Router::new()

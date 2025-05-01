@@ -1,13 +1,12 @@
 // ============================
 // crates/backend-lib/src/config.rs
 // ============================
-//! Configuration management for the `OpenLifter` server.
-//! This module handles loading and validating configuration from various sources:
-//! 1. Environment variables
-//! 2. Configuration file
-//! 3. Default values
-//!
-//!    The configuration is loaded in that order, with later sources taking precedence.
+/** Configuration management for the `OpenLifter` server.
+This module handles loading and validating configuration from various sources:
+1. Environment variables
+2. Configuration file
+3. Default values
+The configuration is loaded in that order, with later sources taking precedence */
 use anyhow::Result;
 use config::{Config, ConfigError};
 use serde::{Deserialize, Serialize};

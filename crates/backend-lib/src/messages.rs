@@ -117,7 +117,7 @@ pub struct UpdateWithMetadata {
     pub priority: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub token: String,
     pub meet_id: String,

@@ -83,13 +83,41 @@ impl AppError {
             AppError::NeedsRecovery { .. } => "RECOVERY_001",
         }
     }
+
+    /// Get a sanitized message suitable for production use
+    pub fn sanitized_message(&self) -> String {
+        match self {
+            AppError::Auth(_) => "Authentication failed".to_string(),
+            AppError::InvalidPassword => "Authentication failed".to_string(),
+            AppError::AuthRateLimited => {
+                "Too many authentication attempts, please try again later".to_string()
+            },
+            AppError::Internal(_) => "An internal server error occurred".to_string(),
+            AppError::Json(_) => "Invalid request format".to_string(),
+            AppError::Io(_) => "Internal server error".to_string(),
+            AppError::NotFound(_) => "Resource not found".to_string(),
+            AppError::MeetNotFound => "Resource not found".to_string(),
+            AppError::InvalidMeetId => "Invalid resource identifier".to_string(),
+            AppError::RateLimitExceeded => {
+                "Rate limit exceeded, please try again later".to_string()
+            },
+            AppError::InvalidInput(_) => "Invalid input provided".to_string(),
+            AppError::NeedsRecovery { .. } => "Data synchronization required".to_string(),
+        }
+    }
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = self.status_code();
         let error_code = self.error_code();
-        let message = self.to_string();
+
+        // Use detailed messages in development, sanitized in production
+        let message = if cfg!(debug_assertions) {
+            self.to_string()
+        } else {
+            self.sanitized_message()
+        };
 
         // Create a JSON response with error details
         let body = serde_json::json!({
