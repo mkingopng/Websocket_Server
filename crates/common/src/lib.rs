@@ -1,7 +1,8 @@
+// ================
 // common/src/lib.rs
+// ================
 //! Common types and structures
 //! used for communication between the `OpenLifter` client and server.
-//!
 //! This module defines the WebSocket protocol messages and supporting types.
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,6 @@ pub type Seq = u64;
 #[serde(tag = "msgType")]
 pub enum ClientToServer {
     /// Create a new meet
-    ///
     /// # Fields
     /// * `this_location_name` - Name of the creating location
     /// * `password` - Meet password (min 10 chars)
@@ -25,7 +25,6 @@ pub enum ClientToServer {
         endpoints: Vec<EndpointPriority>,
     },
     /// Join an existing meet
-    ///
     /// # Fields
     /// * `meet_id` - ID of the meet to join
     /// * `password` - Meet password
@@ -36,7 +35,6 @@ pub enum ClientToServer {
         location_name: String,
     },
     /// Initialize updates from a client
-    ///
     /// # Fields
     /// * `session_token` - Client's session token
     /// * `updates` - List of updates to apply
@@ -45,7 +43,6 @@ pub enum ClientToServer {
         updates: Vec<Update>,
     },
     /// Request updates since a specific sequence number
-    ///
     /// # Fields
     /// * `session_token` - Client's session token
     /// * `last_server_seq` - Last server sequence number seen by client
@@ -54,7 +51,6 @@ pub enum ClientToServer {
         last_server_seq: Seq,
     },
     /// Publish meet results to OPL
-    ///
     /// # Fields
     /// * `session_token` - Client's session token
     /// * `return_email` - Email to send results to

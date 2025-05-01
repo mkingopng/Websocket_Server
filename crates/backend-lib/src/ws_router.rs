@@ -1,8 +1,7 @@
 // ============================
-// openlifter-backend-lib/src/ws_router.rs
+// crates/backend-lib/src/ws_router.rs
 // ============================
 //! WebSocket router for the `OpenLifter` server.
-//!
 //! This module handles WebSocket connections and routes messages
 //! to the appropriate handlers.
 
@@ -58,14 +57,12 @@ async fn ws_handler<S: Storage + Send + Sync + Clone + 'static>(
 }
 
 /// Check state consistency for a meet
-///
 /// This function is called when a client connects to verify state consistency.
 /// It checks for:
 /// 1. Missing updates (gaps in sequence numbers)
 /// 2. Conflicts between clients
 /// 3. Long periods of inactivity
-///
-/// If any inconsistency is detected, it triggers state recovery.
+///    If any inconsistency is detected, it triggers state recovery.
 async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
     handler: &mut WebSocketHandler<S>,
     meet_id: &str,

@@ -177,7 +177,6 @@ impl Storage for FlatFileStorage {
     }
 
     /// Archive a meet by moving it from current-meets to finished-meets
-    ///
     /// The operation is atomic - it either succeeds completely or fails
     /// without modifying the filesystem.
     async fn archive_meet(&self, meet_id: &str) -> Result<(), AppError> {
@@ -192,7 +191,6 @@ impl Storage for FlatFileStorage {
     }
 
     /// Store meet information in meet-info.json
-    ///
     /// The file is created if it doesn't exist, and the information is written
     /// atomically using a temporary file.
     async fn store_meet_info(
@@ -222,7 +220,6 @@ impl Storage for FlatFileStorage {
     }
 
     /// Get meet information from meet-info.json
-    ///
     /// Returns an error if the meet doesn't exist or the file is corrupted.
     async fn get_meet_info(&self, meet_id: &str) -> Result<MeetInfo, AppError> {
         let path = self
@@ -242,7 +239,6 @@ impl Storage for FlatFileStorage {
     }
 
     /// Store meet CSV data and return email
-    ///
     /// The CSV data is stored in meet.csv and the return email in return-email.txt.
     /// Both files are written atomically using temporary files.
     async fn store_meet_csv(

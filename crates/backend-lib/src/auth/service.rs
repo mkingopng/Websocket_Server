@@ -1,3 +1,7 @@
+// =============
+// crates/backend-lib/src/auth/service.rs
+// =============
+//! This module defines the `AuthService` trait, which is used for authentication
 use crate::messages::Session;
 use async_trait::async_trait;
 use std::any::Any;

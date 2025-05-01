@@ -1,3 +1,6 @@
+// ==================
+// crates/backend-lib/src/websocket.rs
+// ==================
 //! WebSocket Handler Module
 //!
 //! This module implements the WebSocket handler for the `OpenLifter` backend server.
@@ -428,10 +431,52 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         match msg {
             ClientMessage::CreateMeet {
                 meet_id,
-                password: _,
+                password,
                 location_name,
                 priority,
             } => {
+                // Validate inputs
+                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_MEET_ID".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
+                // Check meet ID uniqueness
+                if !crate::validation::is_meet_id_unique(meet_id) {
+                    return Ok(ServerMessage::Error {
+                        code: "MEET_ID_EXISTS".to_string(),
+                        message: "Meet ID already exists".to_string(),
+                    });
+                }
+
+                // Validate password
+                match crate::validation::validate_password(&password) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_PASSWORD".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
+                // Validate location name
+                let location_name = match crate::validation::validate_location_name(&location_name)
+                {
+                    Ok(name) => name.to_string(),
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_LOCATION".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
                 // Check auth rate limit
                 if let Some(ip) = self.client_ip {
                     if let Some(auth) = self
@@ -455,6 +500,9 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     }
                 }
 
+                // Register the meet ID as used
+                crate::validation::register_meet_id(meet_id);
+
                 // Set client priority
                 self.set_priority(priority);
 
@@ -462,21 +510,55 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 let session = self
                     .state
                     .auth
-                    .new_session(meet_id.clone(), location_name, priority)
+                    .new_session(meet_id.to_string(), location_name, priority)
                     .await;
 
                 // Return create response
                 Ok(ServerMessage::MeetCreated {
-                    meet_id,
+                    meet_id: meet_id.to_string(),
                     session_token: session,
                 })
             },
             ClientMessage::JoinMeet {
                 meet_id,
-                password: _,
+                password,
                 location_name,
                 priority,
             } => {
+                // Validate inputs
+                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_MEET_ID".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
+                // Validate password
+                match crate::validation::validate_password(&password) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_PASSWORD".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
+                // Validate location name
+                let location_name = match crate::validation::validate_location_name(&location_name)
+                {
+                    Ok(name) => name.to_string(),
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_LOCATION".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
                 // Check auth rate limit
                 if let Some(ip) = self.client_ip {
                     if let Some(auth) = self
@@ -510,130 +592,33 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 let session = self
                     .state
                     .auth
-                    .new_session(meet_id.clone(), location_name, priority)
+                    .new_session(meet_id.to_string(), location_name, priority)
                     .await;
 
                 // Return join response
                 Ok(ServerMessage::MeetJoined {
-                    meet_id,
+                    meet_id: meet_id.to_string(),
                     session_token: session,
                 })
             },
-            // For all other message types, use the handle_other_messages helper
-            ClientMessage::UpdateInit { .. }
-            | ClientMessage::ClientPull { .. }
-            | ClientMessage::PublishMeet { .. }
-            | ClientMessage::StateRecoveryResponse { .. } => self.handle_other_messages(msg).await,
-        }
-    }
-
-    /// Helper method to handle non-authentication message types
-    /// This handles `UpdateInit`, `ClientPull`, `PublishMeet`, and `StateRecoveryResponse`
-    #[allow(clippy::too_many_lines)]
-    async fn handle_other_messages(&mut self, msg: ClientMessage) -> Result<ServerMessage> {
-        match msg {
             ClientMessage::UpdateInit {
                 meet_id,
                 session_token,
                 updates,
             } => {
-                if self.state.auth.validate_session(&session_token).await {
-                    // Get session to retrieve priority
-                    if let Some(session) = self.state.auth.get_session(&session_token).await {
-                        // Update client priority from session
-                        self.set_priority(session.priority);
+                // Validate meet ID
+                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
+                    Ok(id) => id.to_string(),
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_MEET_ID".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
 
-                        // Get handle to the meet actor using if let instead of unwrap
-                        let meet_handle =
-                            if let Some(handle) = self.state.meet_handles.get(&meet_id) {
-                                handle.clone()
-                            } else {
-                                // Create a new meet actor if one doesn't exist
-                                let storage = self.state.storage.clone();
-                                let handle =
-                                    crate::meet_actor::spawn_meet_actor(&meet_id, storage).await;
-                                self.state
-                                    .meet_handles
-                                    .insert(meet_id.clone(), handle.clone());
-                                handle
-                            };
-
-                        // Create openlifter_common::Update from our messages::Update
-                        let ol_updates = updates
-                            .iter()
-                            .map(|u| openlifter_common::Update {
-                                update_key: u.location.clone(),
-                                update_value: serde_json::from_str(&u.value)
-                                    .unwrap_or(serde_json::Value::Null),
-                                #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-                                local_seq_num: u.timestamp as u64, // Use timestamp as sequence number
-                                after_server_seq_num: 0, // Default to 0
-                            })
-                            .collect();
-
-                        match meet_handle
-                            .apply_updates(self.client_id.clone(), session.priority, ol_updates)
-                            .await
-                        {
-                            Ok(update_acks) => {
-                                // Register client for this meet if not already
-                                if let Some(tx) = &self.client_tx {
-                                    self.register_client(&meet_id, tx.clone());
-                                }
-
-                                // Convert to a format expected by UpdateAck
-                                let update_ids =
-                                    update_acks.iter().map(|(id, _)| id.to_string()).collect();
-
-                                // Return response with server-assigned sequence numbers
-                                Ok(ServerMessage::UpdateAck {
-                                    meet_id,
-                                    update_ids,
-                                })
-                            },
-                            Err(e) => {
-                                if let crate::error::AppError::NeedsRecovery {
-                                    meet_id,
-                                    last_known_seq,
-                                } = e
-                                {
-                                    // Automatically initiate state recovery
-                                    println!(
-                                        "State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}"
-                                    );
-
-                                    // Initiate state recovery
-                                    match self
-                                        .initiate_state_recovery(&meet_id, last_known_seq)
-                                        .await
-                                    {
-                                        Ok(()) => Ok(ServerMessage::StateRecoveryRequest {
-                                            meet_id,
-                                            last_known_seq,
-                                        }),
-                                        Err(e) => Ok(ServerMessage::Error {
-                                            code: "RECOVERY_ERROR".to_string(),
-                                            message: e.to_string(),
-                                        }),
-                                    }
-                                } else {
-                                    // Create a list of rejected updates
-                                    let updates_rejected = vec![("all".to_string(), e.to_string())];
-                                    Ok(ServerMessage::UpdateRejected {
-                                        meet_id,
-                                        updates_rejected,
-                                    })
-                                }
-                            },
-                        }
-                    } else {
-                        // Session not found but token was valid (should not happen)
-                        Ok(ServerMessage::Error {
-                            code: "SESSION_ERROR".to_string(),
-                            message: "Session token is valid but session not found".to_string(),
-                        })
-                    }
-                } else {
+                // First check if session is valid to catch InvalidSession before validation errors
+                if !self.state.auth.validate_session(&session_token).await {
                     // If failed login, record it
                     if let Some(ip) = self.client_ip {
                         if let Some(auth) = self
@@ -662,13 +647,150 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                                 return result;
                             }
                             // Failed to reconnect
-                            Ok(ServerMessage::InvalidSession { session_token })
+                            return Ok(ServerMessage::InvalidSession { session_token });
                         },
                         Err(_) => {
                             // Return error if session is invalid
-                            Ok(ServerMessage::InvalidSession { session_token })
+                            return Ok(ServerMessage::InvalidSession { session_token });
                         },
                     }
+                }
+
+                // Validate session token
+                match crate::validation::validate_session_token(&session_token) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_SESSION_TOKEN".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
+                // Validate each update
+                let mut valid_updates = Vec::new();
+                let mut rejected_updates = Vec::new();
+
+                for update in updates {
+                    // Basic validation of location
+                    if update.location.is_empty() {
+                        rejected_updates.push((
+                            update.location.clone(),
+                            "Update location cannot be empty".to_string(),
+                        ));
+                        continue;
+                    }
+
+                    // Basic validation of JSON structure in value
+                    if let Err(err) = serde_json::from_str::<serde_json::Value>(&update.value) {
+                        rejected_updates.push((
+                            update.location.clone(),
+                            format!("Invalid JSON in update value: {err}"),
+                        ));
+                        continue;
+                    }
+
+                    // If all checks pass, keep the update
+                    valid_updates.push(update);
+                }
+
+                // If any updates were rejected, return early with rejection info
+                if !rejected_updates.is_empty() {
+                    return Ok(ServerMessage::UpdateRejected {
+                        meet_id,
+                        updates_rejected: rejected_updates,
+                    });
+                }
+
+                // Get session to retrieve priority
+                if let Some(session) = self.state.auth.get_session(&session_token).await {
+                    // Update client priority from session
+                    self.set_priority(session.priority);
+
+                    // Get handle to the meet actor using if let instead of unwrap
+                    let meet_handle = if let Some(handle) = self.state.meet_handles.get(&meet_id) {
+                        handle.clone()
+                    } else {
+                        // Create a new meet actor if one doesn't exist
+                        let storage = self.state.storage.clone();
+                        let handle = crate::meet_actor::spawn_meet_actor(&meet_id, storage).await;
+                        self.state
+                            .meet_handles
+                            .insert(meet_id.clone(), handle.clone());
+                        handle
+                    };
+
+                    // Create openlifter_common::Update from our messages::Update
+                    let ol_updates = valid_updates
+                        .iter()
+                        .map(|u| openlifter_common::Update {
+                            update_key: u.location.clone(),
+                            update_value: serde_json::from_str(&u.value)
+                                .unwrap_or(serde_json::Value::Null),
+                            #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+                            local_seq_num: u.timestamp as u64, // Use timestamp as sequence number
+                            after_server_seq_num: 0, // Default to 0
+                        })
+                        .collect();
+
+                    match meet_handle
+                        .apply_updates(self.client_id.clone(), session.priority, ol_updates)
+                        .await
+                    {
+                        Ok(update_acks) => {
+                            // Register client for this meet if not already
+                            if let Some(tx) = &self.client_tx {
+                                self.register_client(&meet_id, tx.clone());
+                            }
+
+                            // Convert to a format expected by UpdateAck
+                            let update_ids =
+                                update_acks.iter().map(|(id, _)| id.to_string()).collect();
+
+                            // Return response with server-assigned sequence numbers
+                            Ok(ServerMessage::UpdateAck {
+                                meet_id,
+                                update_ids,
+                            })
+                        },
+                        Err(e) => {
+                            if let crate::error::AppError::NeedsRecovery {
+                                meet_id,
+                                last_known_seq,
+                            } = e
+                            {
+                                // Automatically initiate state recovery
+                                println!(
+                                    "State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}"
+                                );
+
+                                // Initiate state recovery
+                                match self.initiate_state_recovery(&meet_id, last_known_seq).await {
+                                    Ok(()) => Ok(ServerMessage::StateRecoveryRequest {
+                                        meet_id,
+                                        last_known_seq,
+                                    }),
+                                    Err(e) => Ok(ServerMessage::Error {
+                                        code: "RECOVERY_ERROR".to_string(),
+                                        message: e.to_string(),
+                                    }),
+                                }
+                            } else {
+                                // Create a list of rejected updates
+                                let updates_rejected = vec![("all".to_string(), e.to_string())];
+                                Ok(ServerMessage::UpdateRejected {
+                                    meet_id,
+                                    updates_rejected,
+                                })
+                            }
+                        },
+                    }
+                } else {
+                    // Session not found but token was valid (should not happen)
+                    Ok(ServerMessage::Error {
+                        code: "SESSION_ERROR".to_string(),
+                        message: "Session token is valid but session not found".to_string(),
+                    })
                 }
             },
             ClientMessage::ClientPull {
@@ -676,6 +798,28 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 session_token,
                 last_server_seq,
             } => {
+                // Validate meet ID
+                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
+                    Ok(id) => id.to_string(),
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_MEET_ID".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
+                // Validate session token
+                match crate::validation::validate_session_token(&session_token) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_SESSION_TOKEN".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
                 if self.state.auth.validate_session(&session_token).await {
                     // Get session to retrieve priority
                     if let Some(_session) = self.state.auth.get_session(&session_token).await {
@@ -781,11 +925,47 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 return_email,
                 opl_csv,
             } => {
+                // Validate meet ID
+                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
+                    Ok(id) => id.to_string(),
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_MEET_ID".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
+                // Validate session token
+                match crate::validation::validate_session_token(&session_token) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_SESSION_TOKEN".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
+                // Validate email
+                match crate::validation::validate_email(&return_email) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_EMAIL".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
+                // Sanitize the CSV content
+                let sanitized_csv = crate::validation::sanitize_string(&opl_csv);
+
                 if self.state.auth.validate_session(&session_token).await {
                     // TODO: Implement meet publishing
                     println!(
                         "Publishing meet {meet_id} with return email {return_email} (CSV length: {})",
-                        opl_csv.len()
+                        sanitized_csv.len()
                     );
 
                     // Ideally, this would store the meet in a published state
@@ -805,22 +985,55 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 updates,
                 priority,
             } => {
+                // Validate meet ID
+                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
+                    Ok(id) => id.to_string(),
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_MEET_ID".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                };
+
+                // Validate session token
+                match crate::validation::validate_session_token(&session_token) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Ok(ServerMessage::Error {
+                            code: "INVALID_SESSION_TOKEN".to_string(),
+                            message: e.to_string(),
+                        });
+                    },
+                }
+
+                // Validate updates (similar to UpdateInit)
+                let mut valid_updates = Vec::new();
+
+                for update in updates {
+                    // Basic validation of location
+                    if update.location.is_empty() {
+                        continue;
+                    }
+
+                    // Basic validation of JSON structure in value
+                    if serde_json::from_str::<serde_json::Value>(&update.value).is_err() {
+                        continue;
+                    }
+
+                    // If all checks pass, keep the update
+                    valid_updates.push(update);
+                }
+
                 // Process state recovery response
                 self.handle_state_recovery_response(
                     &meet_id,
                     &session_token,
                     last_seq_num,
-                    updates,
+                    valid_updates,
                     priority,
                 )
                 .await
-            },
-            _ => {
-                // This should never happen because we only call this method for specific message types
-                Ok(ServerMessage::Error {
-                    code: "INTERNAL_ERROR".to_string(),
-                    message: "Invalid message type for handle_other_messages".to_string(),
-                })
             },
         }
     }
