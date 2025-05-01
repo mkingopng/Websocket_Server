@@ -206,12 +206,12 @@ impl SessionManager {
 
     /// Get CSRF token for a session
     pub async fn get_csrf_token(&self, token: &str) -> Option<String> {
-        if let Some(entry) = self.sessions.read().await.get(token) {
-            // Update last active time when getting the CSRF token
-            let mut sessions = self.sessions.write().await;
-            if let Some(entry) = sessions.get_mut(token) {
-                entry.last_active = Instant::now();
-            }
+        // Acquire a write lock immediately to avoid read->write deadlock
+        let mut sessions = self.sessions.write().await;
+
+        if let Some(entry) = sessions.get_mut(token) {
+            // Update last active time
+            entry.last_active = Instant::now();
             return Some(entry.csrf_token.clone());
         }
 
@@ -226,7 +226,10 @@ impl SessionManager {
 
     /// Get a session by token
     pub async fn get_session(&self, token: &str) -> Option<Session> {
-        if let Some(entry) = self.sessions.read().await.get(token) {
+        // Acquire a write lock immediately to avoid read->write deadlock
+        let mut sessions = self.sessions.write().await;
+
+        if let Some(entry) = sessions.get_mut(token) {
             let now = Instant::now();
 
             // Check both absolute and idle timeouts
@@ -242,10 +245,7 @@ impl SessionManager {
             }
 
             // Update last active time (sliding window)
-            let mut sessions = self.sessions.write().await;
-            if let Some(entry) = sessions.get_mut(token) {
-                entry.last_active = now;
-            }
+            entry.last_active = now;
 
             // Log successful session validation
             log_security_event(
@@ -267,7 +267,10 @@ impl SessionManager {
 
     /// Validate a session by token
     pub async fn validate_session(&self, token: &str) -> bool {
-        if let Some(entry) = self.sessions.read().await.get(token) {
+        // Acquire a write lock immediately instead of first reading then writing
+        let mut sessions = self.sessions.write().await;
+
+        if let Some(entry) = sessions.get_mut(token) {
             let now = Instant::now();
 
             // Check both absolute and idle timeouts
@@ -283,10 +286,7 @@ impl SessionManager {
             }
 
             // Update last active time (sliding window)
-            let mut sessions = self.sessions.write().await;
-            if let Some(entry) = sessions.get_mut(token) {
-                entry.last_active = now;
-            }
+            entry.last_active = now;
 
             return true;
         }
@@ -402,7 +402,10 @@ impl SessionManager {
 
     /// Verify a CSRF token for a session
     pub async fn verify_csrf_token(&self, session_token: &str, csrf_token: &str) -> bool {
-        if let Some(entry) = self.sessions.read().await.get(session_token) {
+        // Acquire a write lock immediately to avoid read->write deadlock
+        let mut sessions = self.sessions.write().await;
+
+        if let Some(entry) = sessions.get_mut(session_token) {
             // Check if session is valid first
             let now = Instant::now();
             if now.duration_since(entry.created_at) > self.absolute_ttl
@@ -417,6 +420,9 @@ impl SessionManager {
                 );
                 return false;
             }
+
+            // Update last active time
+            entry.last_active = now;
 
             // Verify CSRF token with constant-time comparison to prevent timing attacks
             let is_valid = constant_time_compare(&entry.csrf_token, csrf_token);
@@ -545,53 +551,75 @@ mod tests {
     #[tokio::test]
     async fn test_session_expiry() {
         timeout(Duration::from_secs(5), async {
+            println!("Starting test_session_expiry");
             // Create session manager with short timeouts for testing
             let sm = SessionManager::new_with_timeouts(
                 Duration::from_millis(300), // 300ms absolute timeout (reduced from 500ms)
                 Duration::from_millis(200), // 200ms idle timeout (reduced from 300ms)
             );
+            println!("Created SessionManager");
 
             let session = sm
                 .create_session("test-meet".to_string(), "Test Location".to_string(), 5)
                 .await;
+            println!("Created session");
 
             // Initially valid
+            println!("Validating session for the first time");
             assert!(sm.validate_session(&session.token).await);
+            println!("Session validated successfully");
 
             // Wait for idle timeout (slightly more than timeout)
+            println!("Sleeping for idle timeout (220ms)");
             time::sleep(Duration::from_millis(220)).await;
+            println!("Woke up from sleep");
 
             // Should be expired due to idle timeout
+            println!("Validating session after idle timeout");
             assert!(
                 !sm.validate_session(&session.token).await,
                 "Session should expire after idle timeout"
             );
+            println!("Session expired correctly after idle timeout");
 
             // Create a new session to test absolute timeout
+            println!("Creating a second session");
             let session2 = sm
                 .create_session("test-meet2".to_string(), "Test Location".to_string(), 5)
                 .await;
+            println!("Created second session");
 
             // Keep it active by validating
+            println!("Validating second session");
             assert!(sm.validate_session(&session2.token).await);
+            println!("Second session validated");
 
             // Sleep for less than idle timeout
+            println!("Sleeping for 100ms (less than idle timeout)");
             time::sleep(Duration::from_millis(100)).await;
+            println!("Woke up from short sleep");
 
             // Should still be valid
+            println!("Validating session after short sleep");
             assert!(
                 sm.validate_session(&session2.token).await,
                 "Session should be valid before idle timeout"
             );
+            println!("Session still valid after short sleep");
 
             // Wait for absolute timeout (slightly more than timeout)
+            println!("Sleeping for absolute timeout (220ms)");
             time::sleep(Duration::from_millis(220)).await;
+            println!("Woke up from absolute timeout sleep");
 
             // Should be expired due to absolute timeout
+            println!("Validating session after absolute timeout");
             assert!(
                 !sm.validate_session(&session2.token).await,
                 "Session should expire after absolute timeout"
             );
+            println!("Session expired correctly after absolute timeout");
+            println!("Test completed successfully");
         })
         .await
         .expect("Test timed out");

@@ -65,3 +65,5 @@ fi
 
 echo -e "${GREEN}All checks passed! Commit is ready to be created.${NC}"
 exit 0 
+
+# 4. Run integration tests
