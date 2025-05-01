@@ -1,5 +1,5 @@
 // ============================
-// openlifter-backend-lib/src/error.rs
+// crates/backend-lib/src/error.rs
 // ============================
 //! Central error type + Axum integration.
 use axum::{
@@ -38,6 +38,9 @@ pub enum AppError {
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
 
+    #[error("Authentication rate limit exceeded")]
+    AuthRateLimited,
+
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
@@ -55,7 +58,9 @@ impl AppError {
             AppError::Auth(_) | AppError::InvalidPassword => StatusCode::UNAUTHORIZED,
             AppError::NotFound(_) | AppError::MeetNotFound => StatusCode::NOT_FOUND,
             AppError::InvalidMeetId | AppError::InvalidInput(_) => StatusCode::BAD_REQUEST,
-            AppError::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
+            AppError::RateLimitExceeded | AppError::AuthRateLimited => {
+                StatusCode::TOO_MANY_REQUESTS
+            },
             AppError::NeedsRecovery { .. } => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -73,6 +78,7 @@ impl AppError {
             AppError::MeetNotFound => "MEET_001",
             AppError::InvalidMeetId => "MEET_002",
             AppError::RateLimitExceeded => "RATE_001",
+            AppError::AuthRateLimited => "AUTH_003",
             AppError::InvalidInput(_) => "VAL_001",
             AppError::NeedsRecovery { .. } => "RECOVERY_001",
         }

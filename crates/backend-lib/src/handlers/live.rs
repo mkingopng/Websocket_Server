@@ -1,5 +1,5 @@
 // ============================
-// openlifter-backend-lib/src/handlers/live.rs
+// crates/backend-lib/src/handlers/live.rs
 // ============================
 //! Live WebSocket handlers.
 use tokio::sync::mpsc;

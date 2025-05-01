@@ -1,3 +1,7 @@
+// ==========
+// crates/backend-lib/src/middleware/middleware_tests.rs
+// ==========
+//! Tests for middleware functionality.
 #[cfg(test)]
 mod tests {
     use axum::{

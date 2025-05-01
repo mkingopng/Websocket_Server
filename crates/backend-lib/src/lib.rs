@@ -1,5 +1,5 @@
 // ============================
-// openlifter-backend-lib/src/lib.rs
+// crates/backend-lib/src/lib.rs
 // ============================
 //! Core backend-lib functionality for the `OpenLifter` WebSocket server.
 
@@ -16,7 +16,7 @@ pub mod validation;
 pub mod websocket;
 pub mod ws_router;
 
-use crate::auth::{AuthService, DefaultAuth, SessionManager};
+use crate::auth::{AuthRateLimiter, AuthService, DefaultAuth, SessionManager};
 use crate::config::Settings;
 use crate::meet_actor::MeetHandle;
 use crate::middleware::rate_limit::RateLimiter;
@@ -37,6 +37,8 @@ pub struct AppState<S> {
     pub settings: Arc<Settings>,
     /// Rate limiter
     pub rate_limiter: Arc<RateLimiter>,
+    /// Auth rate limiter
+    pub auth_rate_limiter: Arc<AuthRateLimiter>,
     /// Connected clients by meet ID
     pub clients:
         Arc<dashmap::DashMap<String, Vec<tokio::sync::mpsc::Sender<messages::ServerMessage>>>>,
@@ -48,7 +50,11 @@ impl<S> AppState<S> {
     /// Create a new application state
     pub fn new(storage: S, config: &Settings) -> Result<Self, Box<dyn Error>> {
         let sessions = Arc::new(SessionManager::new());
-        let auth = Arc::new(DefaultAuth::new((*sessions).clone()));
+        let auth_rate_limiter = Arc::new(AuthRateLimiter::default());
+        let auth = Arc::new(DefaultAuth::new_with_rate_limiter(
+            (*sessions).clone(),
+            auth_rate_limiter.clone(),
+        ));
         let settings = Arc::new(config.clone());
         let rate_limiter = Arc::new(RateLimiter::new(std::time::Duration::from_secs(60), 100));
         let clients = Arc::new(dashmap::DashMap::new());
@@ -60,6 +66,7 @@ impl<S> AppState<S> {
             storage,
             settings,
             rate_limiter,
+            auth_rate_limiter,
             clients,
             meet_handles,
         })

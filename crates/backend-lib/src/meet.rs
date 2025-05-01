@@ -1,5 +1,5 @@
 // ============================
-// openlifter-backend-lib/src/meet.rs
+// crates/backend-lib/src/error.rs
 // ============================
 //! Meet management and actor coordination.
 use crate::{

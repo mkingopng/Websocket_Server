@@ -1,12 +1,14 @@
 // ============================
-// openlifter-backend-lib/src/auth/session.rs
+// crates/backend-lib/src/auth/session.rs
 // ============================
 //! Session token handling and management.
 use super::AuthService;
 use crate::messages::Session;
 use async_trait::async_trait;
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 /// Session TTL (time to live)
@@ -15,7 +17,7 @@ pub const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600
 /// Session manager for handling authentication tokens
 #[derive(Debug, Clone)]
 pub struct SessionManager {
-    sessions: Arc<RwLock<HashMap<String, Session>>>,
+    sessions: Arc<RwLock<HashMap<String, (Session, Instant)>>>,
 }
 
 impl Default for SessionManager {
@@ -41,18 +43,35 @@ impl SessionManager {
     ) -> Session {
         let session = Session::new(meet_id, location_name, priority);
         let token = session.token.clone();
-        self.sessions.write().await.insert(token, session.clone());
+        self.sessions
+            .write()
+            .await
+            .insert(token, (session.clone(), Instant::now()));
         session
     }
 
     /// Get a session by token
     pub async fn get_session(&self, token: &str) -> Option<Session> {
-        self.sessions.read().await.get(token).cloned()
+        if let Some((session, creation_time)) = self.sessions.read().await.get(token) {
+            // Check if session is expired
+            if creation_time.elapsed() > SESSION_TTL {
+                return None;
+            }
+            return Some(session.clone());
+        }
+        None
     }
 
     /// Validate a session by token
     pub async fn validate_session(&self, token: &str) -> bool {
-        self.sessions.read().await.contains_key(token)
+        if let Some((_, creation_time)) = self.sessions.read().await.get(token) {
+            // Check if session is expired
+            if creation_time.elapsed() > SESSION_TTL {
+                return false;
+            }
+            return true;
+        }
+        false
     }
 
     /// Remove a session by token
@@ -62,9 +81,26 @@ impl SessionManager {
 
     /// Cleanup task that runs periodically to remove expired sessions
     pub async fn cleanup_expired_sessions(&self) {
-        // TODO: Implement session expiration
         let mut sessions = self.sessions.write().await;
-        sessions.retain(|_, _| true);
+        let _now = Instant::now();
+
+        // Remove all sessions that have expired
+        sessions.retain(|_, (_, creation_time)| {
+            // Keep session if not expired (creation_time + TTL > now)
+            creation_time.elapsed() < SESSION_TTL
+        });
+
+        // Log the number of active sessions after cleanup
+        println!(
+            "Session cleanup complete: {} active sessions",
+            sessions.len()
+        );
+    }
+
+    /// Return count of active sessions
+    pub async fn active_session_count(&self) -> usize {
+        let sessions = self.sessions.read().await;
+        sessions.len()
     }
 }
 
@@ -76,10 +112,16 @@ impl AuthService for SessionManager {
     }
 
     async fn get_session(&self, token: &str) -> Option<Session> {
-        self.get_session(token).await
+        // Call the method from SessionManager, not recursively
+        SessionManager::get_session(self, token).await
     }
 
     async fn validate_session(&self, token: &str) -> bool {
-        self.validate_session(token).await
+        // Call the method from SessionManager, not recursively
+        SessionManager::validate_session(self, token).await
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

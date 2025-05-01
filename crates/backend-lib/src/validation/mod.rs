@@ -1,5 +1,5 @@
 // ============================
-// openlifter-backend-lib/src/validation/mod.rs
+// crates/backend-lib/src/validation/mod.rs
 // ============================
 //! Message validation module.
 

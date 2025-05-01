@@ -2,7 +2,6 @@
 // openlifter-backend-lib/src/storage.rs
 // ============================
 //! Storage abstraction with flat-file implementation.
-//!
 //! This module provides a trait-based storage abstraction for meet data,
 //! with a flat-file implementation that stores data in a simple directory structure:
 //!
@@ -34,50 +33,41 @@ use std::{
 use tokio::{fs as tokio_fs, io::AsyncWriteExt};
 
 /// Trait for storage backends
-///
 /// This trait defines the interface for storing and retrieving meet data.
 /// Implementations should ensure data consistency and handle concurrent access
 /// appropriately.
 #[async_trait]
 pub trait Storage: Send + Sync {
     /// Append a JSON line to the updates log
-    ///
     /// # Arguments
     /// * `meet_id` - ID of the meet
     /// * `json_line` - JSON-encoded update to append
-    ///
     /// # Returns
     /// * `Ok(())` if the update was successfully appended
     /// * `Err(AppError)` if the operation failed
     async fn append_update(&self, meet_id: &str, json_line: &str) -> Result<(), AppError>;
 
     /// Read all updates for a meet
-    ///
     /// # Arguments
     /// * `meet_id` - ID of the meet
-    ///
     /// # Returns
     /// * `Ok(Vec<String>)` - List of JSON-encoded updates
     /// * `Err(AppError)` if the operation failed
     async fn read_updates(&self, meet_id: &str) -> Result<Vec<String>, AppError>;
 
     /// Archive a meet (move from current to finished)
-    ///
     /// # Arguments
     /// * `meet_id` - ID of the meet to archive
-    ///
     /// # Returns
     /// * `Ok(())` if the meet was successfully archived
     /// * `Err(AppError)` if the operation failed
     async fn archive_meet(&self, meet_id: &str) -> Result<(), AppError>;
 
     /// Store meet information
-    ///
     /// # Arguments
     /// * `meet_id` - ID of the meet
     /// * `password_hash` - Hashed meet password
     /// * `endpoints` - List of endpoints with priorities
-    ///
     /// # Returns
     /// * `Ok(())` if the information was successfully stored
     /// * `Err(AppError)` if the operation failed
@@ -89,22 +79,18 @@ pub trait Storage: Send + Sync {
     ) -> Result<(), AppError>;
 
     /// Get meet information
-    ///
     /// # Arguments
     /// * `meet_id` - ID of the meet
-    ///
     /// # Returns
     /// * `Ok(MeetInfo)` - Meet information
     /// * `Err(AppError)` if the operation failed
     async fn get_meet_info(&self, meet_id: &str) -> Result<MeetInfo, AppError>;
 
     /// Store meet CSV data
-    ///
     /// # Arguments
     /// * `meet_id` - ID of the meet
     /// * `opl_csv` - CSV data in OPL format
     /// * `return_email` - Email to send results to
-    ///
     /// # Returns
     /// * `Ok(())` if the data was successfully stored
     /// * `Err(AppError)` if the operation failed
@@ -117,7 +103,6 @@ pub trait Storage: Send + Sync {
 }
 
 /// Flat-file implementation of the Storage trait
-///
 /// This implementation stores meet data in a simple directory structure
 /// under the specified root directory. All operations are performed
 /// atomically where possible to ensure data consistency.
@@ -128,10 +113,8 @@ pub struct FlatFileStorage {
 
 impl FlatFileStorage {
     /// Create a new flat-file storage instance
-    ///
     /// # Arguments
     /// * `root` - Root directory for storing meet data
-    ///
     /// # Returns
     /// * `Ok(FlatFileStorage)` - New storage instance
     /// * `Err(anyhow::Error)` if the directories could not be created
@@ -146,7 +129,6 @@ impl FlatFileStorage {
 #[async_trait]
 impl Storage for FlatFileStorage {
     /// Append a JSON line to `updates.log`.
-    ///
     /// The file is created if it doesn't exist, and the update is appended
     /// atomically using a temporary file.
     async fn append_update(&self, meet_id: &str, json_line: &str) -> Result<(), AppError> {
@@ -172,7 +154,6 @@ impl Storage for FlatFileStorage {
     }
 
     /// Read all updates for a meet
-    ///
     /// Returns an empty vector if the meet doesn't exist or has no updates.
     async fn read_updates(&self, meet_id: &str) -> Result<Vec<String>, AppError> {
         let path = self

@@ -16,7 +16,7 @@ use crate::{
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        ConnectInfo, State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
@@ -25,6 +25,7 @@ use axum::{
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use metrics::{counter, gauge};
+use std::net::SocketAddr;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::mpsc;
 
@@ -36,20 +37,24 @@ pub fn create_router<S: Storage + Send + Sync + Clone + 'static>(
     state: Arc<AppState<S>>,
 ) -> Router {
     Router::new()
-        .route("/ws", get(websocket_handler))
+        .route("/ws", get(ws_handler))
         .with_state(state)
 }
 
 /// Handle WebSocket connections
-async fn websocket_handler<S: Storage + Send + Sync + Clone + 'static>(
-    ws: WebSocketUpgrade,
+async fn ws_handler<S: Storage + Send + Sync + Clone + 'static>(
     State(state): State<Arc<AppState<S>>>,
+    ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     // Create a handler - move it into the closure
-    let handler = WebSocketHandler::new(state);
+    let mut handler = WebSocketHandler::new(state);
+
+    // Set the client IP address for rate limiting
+    handler.set_client_ip(addr.ip());
 
     // Upgrade the connection
-    ws.on_upgrade(move |socket| handle_socket(socket, handler))
+    ws.on_upgrade(move |socket| handle_socket(socket, handler, addr))
 }
 
 /// Check state consistency for a meet
@@ -110,6 +115,7 @@ async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
 async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
     socket: WebSocket,
     mut handler: WebSocketHandler<S>,
+    _addr: SocketAddr,
 ) {
     // Split the socket into sender and receiver
     let (mut sender, mut receiver) = socket.split();
@@ -176,23 +182,32 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
 
                 // Process the message
                 if let Ok(response) = handler.handle_message(client_msg).await {
-                    // Send the response back to the client
                     tx.send(response).await.ok();
+                }
+            } else {
+                // Malformed message
+                if let Err(e) = tx
+                    .send(ServerMessage::MalformedMessage {
+                        err_msg: "Invalid message format".to_string(),
+                    })
+                    .await
+                {
+                    eprintln!("Error sending malformed message response: {e}");
                 }
             }
         }
     }
 
-    // Abort the send task when the connection is closed
-    send_task.abort();
-
-    // Update metrics
-    let _ = gauge!("ws.active", &[("value", "-1")]);
-
-    // If we had a meet_id, unregister the client
+    // When the connection is closed, unregister the client
     if !connected_meet_id.is_empty() {
         handler.unregister_client(&connected_meet_id);
     }
+
+    // Wait for the send task to complete
+    _ = send_task.await;
+
+    // Update metrics
+    let _ = gauge!("ws.active", &[("value", "-1")]);
 }
 
 #[cfg(test)]

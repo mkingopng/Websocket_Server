@@ -27,6 +27,7 @@ use crate::messages::{ClientMessage, ServerMessage, Update, UpdateWithMetadata};
 use crate::storage::Storage;
 use crate::AppState;
 use anyhow::{anyhow, Result};
+use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
@@ -44,6 +45,7 @@ pub struct WebSocketHandler<S: Storage + Send + Sync + Clone + 'static> {
     client_tx: Option<mpsc::Sender<ServerMessage>>,
     client_priority: u8,
     reconnect_attempts: u8,
+    client_ip: Option<IpAddr>,
 }
 
 impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
@@ -54,7 +56,13 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             client_tx: None,
             client_priority: 0,
             reconnect_attempts: 0,
+            client_ip: None,
         }
+    }
+
+    /// Set client IP address
+    pub fn set_client_ip(&mut self, ip: IpAddr) {
+        self.client_ip = Some(ip);
     }
 
     // Register this client for a specific meet
@@ -200,16 +208,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         }
 
         Ok(())
-    }
-
-    // Get updates since a specific sequence number
-    fn get_updates_since(_meet_id: &str, _last_server_seq: u64) -> Vec<UpdateWithMetadata> {
-        // In a real implementation, this would retrieve updates from a database
-        // For now, just return an empty vector as a placeholder
-        // This would be replaced with actual state retrieval logic in a production system
-
-        // Placeholder for retrieving updates from storage
-        Vec::new()
     }
 
     // Apply conflict resolution to updates - this would be much more sophisticated in a real system
@@ -434,6 +432,29 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 location_name,
                 priority,
             } => {
+                // Check auth rate limit
+                if let Some(ip) = self.client_ip {
+                    if let Some(auth) = self
+                        .state
+                        .auth
+                        .as_any()
+                        .downcast_ref::<crate::auth::DefaultAuth>()
+                    {
+                        if auth.check_auth_rate_limit(ip).is_err() {
+                            println!("Auth rate limit exceeded for IP {ip}");
+                            return Ok(ServerMessage::Error {
+                                code: "AUTH_RATE_LIMITED".to_string(),
+                                message:
+                                    "Too many authentication attempts. Please try again later."
+                                        .to_string(),
+                            });
+                        }
+
+                        // Record success
+                        auth.record_success(ip);
+                    }
+                }
+
                 // Set client priority
                 self.set_priority(priority);
 
@@ -456,6 +477,29 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 location_name,
                 priority,
             } => {
+                // Check auth rate limit
+                if let Some(ip) = self.client_ip {
+                    if let Some(auth) = self
+                        .state
+                        .auth
+                        .as_any()
+                        .downcast_ref::<crate::auth::DefaultAuth>()
+                    {
+                        if auth.check_auth_rate_limit(ip).is_err() {
+                            println!("Auth rate limit exceeded for IP {ip}");
+                            return Ok(ServerMessage::Error {
+                                code: "AUTH_RATE_LIMITED".to_string(),
+                                message:
+                                    "Too many authentication attempts. Please try again later."
+                                        .to_string(),
+                            });
+                        }
+
+                        // Record success
+                        auth.record_success(ip);
+                    }
+                }
+
                 // Set client priority
                 self.set_priority(priority);
 
@@ -474,14 +518,20 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     meet_id,
                     session_token: session,
                 })
-
-                // In a real implementation, this might reject the join attempt:
-                /*
-                Ok(ServerMessage::JoinRejected {
-                    reason: "Invalid meet ID or password".to_string(),
-                })
-                */
             },
+            // For all other message types, use the handle_other_messages helper
+            ClientMessage::UpdateInit { .. }
+            | ClientMessage::ClientPull { .. }
+            | ClientMessage::PublishMeet { .. }
+            | ClientMessage::StateRecoveryResponse { .. } => self.handle_other_messages(msg).await,
+        }
+    }
+
+    /// Helper method to handle non-authentication message types
+    /// This handles `UpdateInit`, `ClientPull`, `PublishMeet`, and `StateRecoveryResponse`
+    #[allow(clippy::too_many_lines)]
+    async fn handle_other_messages(&mut self, msg: ClientMessage) -> Result<ServerMessage> {
+        match msg {
             ClientMessage::UpdateInit {
                 meet_id,
                 session_token,
@@ -509,83 +559,70 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                             };
 
                         // Create openlifter_common::Update from our messages::Update
-                        let common_updates: Vec<openlifter_common::Update> = updates
+                        let ol_updates = updates
                             .iter()
                             .map(|u| openlifter_common::Update {
                                 update_key: u.location.clone(),
                                 update_value: serde_json::from_str(&u.value)
                                     .unwrap_or(serde_json::Value::Null),
-                                #[allow(clippy::cast_sign_loss)]
-                                local_seq_num: if u.timestamp < 0 {
-                                    0
-                                } else {
-                                    u.timestamp as u64
-                                },
-                                after_server_seq_num: 0, // TODO: Implement proper server seq tracking
+                                #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+                                local_seq_num: u.timestamp as u64, // Use timestamp as sequence number
+                                after_server_seq_num: 0, // Default to 0
                             })
                             .collect();
 
-                        // Apply updates to the meet actor
                         match meet_handle
-                            .apply_updates(self.client_id.clone(), session.priority, common_updates)
+                            .apply_updates(self.client_id.clone(), session.priority, ol_updates)
                             .await
                         {
-                            Ok(_seq_mappings) => {
-                                // Create ACK with update IDs
-                                let update_ids = updates
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(i, _)| i.to_string())
-                                    .collect();
+                            Ok(update_acks) => {
+                                // Register client for this meet if not already
+                                if let Some(tx) = &self.client_tx {
+                                    self.register_client(&meet_id, tx.clone());
+                                }
 
+                                // Convert to a format expected by UpdateAck
+                                let update_ids =
+                                    update_acks.iter().map(|(id, _)| id.to_string()).collect();
+
+                                // Return response with server-assigned sequence numbers
                                 Ok(ServerMessage::UpdateAck {
                                     meet_id,
                                     update_ids,
                                 })
                             },
                             Err(e) => {
-                                match e {
-                                    crate::error::AppError::NeedsRecovery {
-                                        meet_id,
-                                        last_known_seq,
-                                    } => {
-                                        // Automatically initiate state recovery
-                                        println!(
-                                            "State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}"
-                                        );
+                                if let crate::error::AppError::NeedsRecovery {
+                                    meet_id,
+                                    last_known_seq,
+                                } = e
+                                {
+                                    // Automatically initiate state recovery
+                                    println!(
+                                        "State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}"
+                                    );
 
-                                        // Initiate state recovery
-                                        match self
-                                            .initiate_state_recovery(&meet_id, last_known_seq)
-                                            .await
-                                        {
-                                            Ok(()) => {
-                                                // Return a special message to inform the client we're recovering
-                                                Ok(ServerMessage::StateRecoveryRequest {
-                                                    meet_id: meet_id.clone(),
-                                                    last_known_seq,
-                                                })
-                                            },
-                                            Err(recovery_err) => {
-                                                // If recovery initiation failed, return error
-                                                println!(
-                                                    "Failed to initiate state recovery: {recovery_err}"
-                                                );
-                                                Ok(ServerMessage::Error {
-                                                    code: "RECOVERY_FAILED".to_string(),
-                                                    message: recovery_err.to_string(),
-                                                })
-                                            },
-                                        }
-                                    },
-                                    other_err => {
-                                        // Handle other errors
-                                        println!("Error applying updates: {other_err}");
-                                        Ok(ServerMessage::Error {
-                                            code: "UPDATE_ERROR".to_string(),
-                                            message: other_err.to_string(),
-                                        })
-                                    },
+                                    // Initiate state recovery
+                                    match self
+                                        .initiate_state_recovery(&meet_id, last_known_seq)
+                                        .await
+                                    {
+                                        Ok(()) => Ok(ServerMessage::StateRecoveryRequest {
+                                            meet_id,
+                                            last_known_seq,
+                                        }),
+                                        Err(e) => Ok(ServerMessage::Error {
+                                            code: "RECOVERY_ERROR".to_string(),
+                                            message: e.to_string(),
+                                        }),
+                                    }
+                                } else {
+                                    // Create a list of rejected updates
+                                    let updates_rejected = vec![("all".to_string(), e.to_string())];
+                                    Ok(ServerMessage::UpdateRejected {
+                                        meet_id,
+                                        updates_rejected,
+                                    })
                                 }
                             },
                         }
@@ -597,6 +634,18 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                         })
                     }
                 } else {
+                    // If failed login, record it
+                    if let Some(ip) = self.client_ip {
+                        if let Some(auth) = self
+                            .state
+                            .auth
+                            .as_any()
+                            .downcast_ref::<crate::auth::DefaultAuth>()
+                        {
+                            auth.record_failed_attempt(ip);
+                        }
+                    }
+
                     // Session is invalid, try to reconnect
                     match self.try_reconnect(&meet_id, &session_token).await {
                         Ok(reconnected) => {
@@ -627,21 +676,80 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 session_token,
                 last_server_seq,
             } => {
-                // Validate the session first
                 if self.state.auth.validate_session(&session_token).await {
-                    // Get updates since the last sequence number the client has seen
-                    let updates = Self::get_updates_since(&meet_id, last_server_seq);
+                    // Get session to retrieve priority
+                    if let Some(_session) = self.state.auth.get_session(&session_token).await {
+                        // Get handle to the meet actor
+                        let updates = if let Some(handle) = self.state.meet_handles.get(&meet_id) {
+                            // Get updates since last_server_seq
+                            match handle.get_updates_since(last_server_seq).await {
+                                Ok(updates) => {
+                                    // Convert UpdateWithServerSeq to UpdateWithMetadata
+                                    let updates_with_metadata: Vec<UpdateWithMetadata> = updates
+                                        .iter()
+                                        .map(|u| {
+                                            let update = Update {
+                                                location: u.update.update_key.clone(),
+                                                value: u.update.update_value.to_string(),
+                                                #[allow(
+                                                    clippy::cast_possible_wrap,
+                                                    clippy::cast_sign_loss
+                                                )]
+                                                timestamp: u.update.local_seq_num as i64,
+                                            };
+                                            UpdateWithMetadata {
+                                                update,
+                                                source_client: u.source_client_id.clone(),
+                                                server_seq: u.server_seq_num,
+                                                priority: u.source_client_priority,
+                                            }
+                                        })
+                                        .collect();
+                                    updates_with_metadata
+                                },
+                                Err(e) => {
+                                    return Ok(ServerMessage::Error {
+                                        code: "PULL_ERROR".to_string(),
+                                        message: e.to_string(),
+                                    });
+                                },
+                            }
+                        } else {
+                            // Meet does not exist yet (no updates)
+                            Vec::new()
+                        };
 
-                    // Get the current highest sequence number
-                    let current_server_seq = last_server_seq + updates.len() as u64;
+                        // Register client for this meet if not already
+                        if let Some(tx) = &self.client_tx {
+                            self.register_client(&meet_id, tx.clone());
+                        }
 
-                    // Return the updates to the client
-                    Ok(ServerMessage::ServerPull {
-                        meet_id,
-                        last_server_seq: current_server_seq,
-                        updates_relayed: updates,
-                    })
+                        // Return updates
+                        Ok(ServerMessage::ServerPull {
+                            meet_id,
+                            last_server_seq,
+                            updates_relayed: updates,
+                        })
+                    } else {
+                        // Session not found but token was valid (should not happen)
+                        Ok(ServerMessage::Error {
+                            code: "SESSION_ERROR".to_string(),
+                            message: "Session token is valid but session not found".to_string(),
+                        })
+                    }
                 } else {
+                    // If failed login, record it
+                    if let Some(ip) = self.client_ip {
+                        if let Some(auth) = self
+                            .state
+                            .auth
+                            .as_any()
+                            .downcast_ref::<crate::auth::DefaultAuth>()
+                        {
+                            auth.record_failed_attempt(ip);
+                        }
+                    }
+
                     // Session may have expired - attempt to reconnect
                     match self.try_reconnect(&meet_id, &session_token).await {
                         Ok(reconnected) => {
@@ -673,43 +781,21 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 return_email,
                 opl_csv,
             } => {
-                // Validate the session first
                 if self.state.auth.validate_session(&session_token).await {
-                    // In a real implementation, this would actually publish the meet results
-
-                    // Log the publication attempt
+                    // TODO: Implement meet publishing
                     println!(
-                        "Meet publication requested: meet_id={meet_id}, email={return_email}, csv_length={}",
+                        "Publishing meet {meet_id} with return email {return_email} (CSV length: {})",
                         opl_csv.len()
                     );
 
-                    // Return acknowledgment
+                    // Ideally, this would store the meet in a published state
+                    // and send the CSV data to OpenPowerlifting
+
+                    // Return success response
                     Ok(ServerMessage::PublishAck { meet_id })
                 } else {
-                    // Session may have expired - attempt to reconnect
-                    match self.try_reconnect(&meet_id, &session_token).await {
-                        Ok(reconnected) => {
-                            if reconnected {
-                                // Successfully reconnected - try the publication again
-                                // Use Box::pin to avoid infinite recursion
-                                let result =
-                                    Box::pin(self.handle_message(ClientMessage::PublishMeet {
-                                        meet_id,
-                                        session_token,
-                                        return_email,
-                                        opl_csv,
-                                    }))
-                                    .await;
-                                return result;
-                            }
-                            // Failed to reconnect
-                            Ok(ServerMessage::InvalidSession { session_token })
-                        },
-                        Err(_) => {
-                            // Return error if session is invalid
-                            Ok(ServerMessage::InvalidSession { session_token })
-                        },
-                    }
+                    // Return error if session is invalid
+                    Ok(ServerMessage::InvalidSession { session_token })
                 }
             },
             ClientMessage::StateRecoveryResponse {
@@ -719,7 +805,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 updates,
                 priority,
             } => {
-                // Handle state recovery response
+                // Process state recovery response
                 self.handle_state_recovery_response(
                     &meet_id,
                     &session_token,
@@ -728,6 +814,13 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     priority,
                 )
                 .await
+            },
+            _ => {
+                // This should never happen because we only call this method for specific message types
+                Ok(ServerMessage::Error {
+                    code: "INTERNAL_ERROR".to_string(),
+                    message: "Invalid message type for handle_other_messages".to_string(),
+                })
             },
         }
     }

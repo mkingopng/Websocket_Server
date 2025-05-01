@@ -1,5 +1,5 @@
 // ============================
-// openlifter-backend-lib/src/auth/password.rs
+// crates/backend-lib/src/auth/password.rs
 // ============================
 //! Password hashing and verification.
 use argon2::Argon2;

@@ -1,3 +1,6 @@
+// ================
+// crates/backend-lib/src/messages.rs
+// ================
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

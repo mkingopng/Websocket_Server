@@ -1,3 +1,6 @@
+// ==============
+// crates/backend-lib/src/metrics.rs
+// ==============
 //! Central place for Prometheus metric keys
 pub const WS_CONNECTION: &str = "ws.connection";
 pub const WS_ACTIVE: &str = "ws.active";

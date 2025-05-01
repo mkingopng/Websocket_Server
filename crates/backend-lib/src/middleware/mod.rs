@@ -1,3 +1,6 @@
+// =============
+// crates/backend-lib/src/middleware/mod.rs
+// =============
 //! Middleware for the `OpenLifter` WebSocket server.
 
 pub mod rate_limit;

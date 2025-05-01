@@ -27,8 +27,7 @@ Overall coverage: **39.85%** (326/818 lines covered)
 | `meet.rs`                  | 0.00%    | 0             | 19          |
 | `main.rs`                  | 0.00%    | 0             | 11          |
 
-## Unit Tests To-Do
-
+## Unit Tests
 - [x] Validation module tests (100% coverage)
 - [x] Auth service implementation tests (100% coverage)
 - [x] WebSocket handler tests (48.84% coverage)
@@ -66,8 +65,7 @@ Overall coverage: **39.85%** (326/818 lines covered)
   - [ ] Test rate limit window sliding
   - [ ] Test rate limit bypass for certain operations
 
-## Integration Tests To-Do
-
+## Integration Tests
 - [x] Basic WebSocket flow tests (connection, messaging, disconnection)
 - [x] Conflict resolution tests
 - [x] Reconnection and retry logic tests
@@ -89,8 +87,7 @@ Overall coverage: **39.85%** (326/818 lines covered)
   - [ ] Test data migration
   - [ ] Test backup/restore functionality
 
-## End-to-End Tests To-Do
-
+## End-to-End Tests
 - [x] Basic WebSocket communication script (`websocket_test.sh`)
 - [x] Network resilience test script (`network_resilience_test.sh`)
 - [ ] Load testing
@@ -111,8 +108,7 @@ Overall coverage: **39.85%** (326/818 lines covered)
   - [ ] Test with mobile clients
   - [ ] Test with desktop clients
 
-## Performance Benchmarks To-Do
-
+## Performance Benchmarks
 - [ ] Message throughput benchmarks
   - [ ] Measure messages per second
   - [ ] Measure latency
@@ -127,7 +123,6 @@ Overall coverage: **39.85%** (326/818 lines covered)
   - [ ] Measure under concurrent access
 
 ## Test Improvement Notes
-
 - The WebSocket handler has seen significant improvement in test coverage, but complex logic around reconnection and conflict resolution needs more targeted tests.
 - We've added initial WebSocket router tests, increasing coverage from 0% to 4.82%, but significant parts remain untested.
 - The auth modules need more comprehensive testing, especially for password handling.
