@@ -1,3 +1,7 @@
+// ============================
+// tests/unit/password_tests.rs
+// ============================
+//! This test file is for testing password hashing and validation functions.
 use backend_lib::auth::{validate_password_strength, PasswordRequirements};
 
 #[test]

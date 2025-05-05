@@ -1,3 +1,7 @@
+// ==============================
+// tests/unit/rate_limit_tests.rs
+// ==============================
+//! This test suite is designed to validate the functionality of the `AuthRateLimiter`
 use backend_lib::auth::AuthRateLimiter;
 use std::net::{IpAddr, Ipv4Addr};
 

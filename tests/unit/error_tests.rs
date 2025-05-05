@@ -1,5 +1,8 @@
+// =========================
+// tests/unit/error_tests.rs
+// =========================
+//! Unit tests for the error module
 use axum::http::StatusCode;
-// use axum::response::IntoResponse;
 use backend_lib::error::AppError;
 use std::io::{Error as IoError, ErrorKind};
 

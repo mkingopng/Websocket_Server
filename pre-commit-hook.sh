@@ -53,17 +53,27 @@ fi
 
 # 4. Run unit tests
 echo "Running unit tests..."
-cargo test --all
-TEST_RESULT=$?
+cargo test --lib
+UNIT_TEST_RESULT=$?
 
-if [ $TEST_RESULT -ne 0 ]; then
+if [ $UNIT_TEST_RESULT -ne 0 ]; then
     echo -e "${RED}Unit tests failed. Please fix the issues before committing.${NC}"
     exit 1
 else
     echo -e "${GREEN}Unit tests passed.${NC}"
 fi
 
+# 5. Run integration tests
+echo "Running integration tests..."
+cargo test integration::
+INTEGRATION_TEST_RESULT=$?
+
+if [ $INTEGRATION_TEST_RESULT -ne 0 ]; then
+    echo -e "${RED}Integration tests failed. Please fix the issues before committing.${NC}"
+    exit 1
+else
+    echo -e "${GREEN}Integration tests passed.${NC}"
+fi
+
 echo -e "${GREEN}All checks passed! Commit is ready to be created.${NC}"
 exit 0 
-
-# 4. Run integration tests

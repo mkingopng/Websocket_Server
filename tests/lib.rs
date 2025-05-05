@@ -7,6 +7,7 @@ mod unit {
     // Unit tests
     mod config_tests;
     mod error_tests;
+    mod live_handler_tests;
     mod meet_tests;
     mod middleware_tests;
     mod password_tests;

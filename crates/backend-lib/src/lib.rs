@@ -6,6 +6,7 @@
 pub mod auth;
 pub mod config;
 pub mod error;
+pub mod handlers;
 pub mod meet;
 pub mod meet_actor;
 pub mod messages;

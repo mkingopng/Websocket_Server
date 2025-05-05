@@ -1,19 +1,6 @@
-// use backend_lib::auth::{AuthService, DefaultAuth, PersistentSessionManager};
-// use tempfile::tempdir;
+use backend_lib::auth::{AuthService, DefaultAuth, PersistentSessionManager};
+use tempfile::tempdir;
 
-// Note: The original test is hanging, possibly due to session persistence
-// causing indefinite waits. Replacing with a simpler test that doesn't
-// depend on actual session storage.
-
-/// Simple test to avoid hanging in CI
-#[test]
-fn test_auth_service_flow_simplified() {
-    // This is a placeholder test that will always pass
-    // Using 1 == 1 instead of assert!(true) to avoid clippy warning
-    assert_eq!(1, 1, "Simplified test to avoid hanging");
-}
-
-/*
 #[tokio::test]
 async fn test_auth_service_flow() {
     // Create a temporary directory for session storage
@@ -53,4 +40,3 @@ async fn test_auth_service_flow() {
     let is_valid = auth_service.validate_session("invalid-token").await;
     assert!(!is_valid, "Invalid session should not be valid");
 }
-*/

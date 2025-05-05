@@ -18,70 +18,81 @@ tests/
 Currently, unit tests still exist in their respective modules, and the new test files are skeletons that need to be adapted to the actual API.
 
 ## Current Coverage (as of latest tarpaulin report)
-Overall coverage: **39.85%** (326/818 lines covered)
+Overall coverage: **51.79%** (837/1616 lines covered)
 
 ### Coverage by File
 
-| File                       | Coverage | Lines Covered | Total Lines |
-|----------------------------|----------|---------------|-------------|
-| `validation/mod.rs`        | 100.00%  | 74            | 74          |
-| `auth/service_impl.rs`     | 100.00%  | 9             | 9           |
-| `messages.rs`              | 100.00%  | 2             | 2           |
-| `lib.rs`                   | 75.00%   | 12            | 16          |
-| `websocket.rs`             | 48.84%   | 105           | 215         |
-| `auth/session.rs`          | 44.00%   | 11            | 25          |
-| `storage.rs`               | 76.81%   | 53            | 69          |
-| `ws_router.rs`             | 4.82%    | 4             | 83          |
-| `config.rs`                | 26.92%   | 7             | 26          |
-| `middleware/rate_limit.rs` | 7.14%    | 2             | 28          |
-| `meet_actor.rs`            | 40.40%   | 40            | 99          |
-| `handlers/live.rs`         | 0.00%    | 0             | 79          |
-| `error.rs`                 | 0.00%    | 0             | 31          |
-| `auth/password.rs`         | 0.00%    | 0             | 25          |
-| `meet.rs`                  | 0.00%    | 0             | 19          |
-| `main.rs`                  | 0.00%    | 0             | 11          |
+| File                         | Coverage | Lines Covered | Total Lines |
+|------------------------------|----------|---------------|-------------|
+| `auth/token_generator.rs`    | 100.00%  | 6             | 6           |
+| `auth/password.rs`           | 48.00%   | 12            | 25          |
+| `auth/persistent_session.rs` | 68.48%   | 113           | 165         |
+| `auth/rate_limit.rs`         | 71.11%   | 32            | 45          |
+| `auth/service_impl.rs`       | 55.00%   | 11            | 20          |
+| `auth/session.rs`            | 76.57%   | 134           | 175         |
+| `config.rs`                  | 46.15%   | 12            | 26          |
+| `error.rs`                   | 62.50%   | 30            | 48          |
+| `handlers/live.rs`           | 25.32%   | 20            | 79          |
+| `lib.rs`                     | 80.00%   | 20            | 25          |
+| `meet.rs`                    | 0.00%    | 0             | 19          |
+| `meet_actor.rs`              | 64.68%   | 130           | 201         |
+| `messages.rs`                | 0.00%    | 0             | 2           |
+| `middleware/rate_limit.rs`   | 7.14%    | 2             | 28          |
+| `storage.rs`                 | 76.81%   | 53            | 69          |
+| `validation/mod.rs`          | 71.79%   | 84            | 117         |
+| `websocket.rs`               | 42.74%   | 203           | 475         |
+| `ws_router.rs`               | 71.64%   | 48            | 67          |
+| `main.rs`                    | 0.00%    | 0             | 23          |
 
 ## Unit Tests
-- [x] Validation module tests (100% coverage)
-- [x] Auth service implementation tests (100% coverage)
-- [x] WebSocket handler tests (48.84% coverage)
-- [x] WebSocket router tests (4.82% coverage) - Basic tests added
+- [x] Validation module tests (71.79% coverage)
+- [x] Auth service implementation tests (55.00% coverage)
+- [x] WebSocket handler tests (42.74% coverage) - Significantly improved
+- [x] WebSocket router tests (71.64% coverage) - Major improvement, now passing
   - [x] Test malformed message handling
-  - [x] Test unknown message types
   - [x] Test session validation
-  - [ ] Test additional message types
-  - [ ] Test WebSocket connection handling more thoroughly
+  - [x] Test router creation
+  - [x] Test handler process message
+  - [x] Test error serialization
+  - [x] Test validation errors
+  - [x] Test message handling workflow
+  - [x] Test router with middleware and logging
   - [ ] Test disconnection scenarios
   - [ ] Test more complex error handling
-- [x] Error handling tests (Implemented but coverage pending)
+- [x] Error handling tests (62.50% coverage)
   - [x] Test error creation for each error type
   - [x] Test error serialization
   - [x] Test error responses
-- [x] Password authentication tests (Implemented but coverage pending)
+- [x] Password authentication tests (48.00% coverage)
   - [x] Test password validation
   - [x] Test password hashing
   - [x] Test password verification
-- [ ] Session management tests (44% coverage)
-  - [ ] Test session creation
-  - [ ] Test session validation
-  - [ ] Test session expiration
+- [x] Session management tests (76.57% coverage)
+  - [x] Test session creation
+  - [x] Test session validation
+  - [x] Test session expiration
+  - [x] Test CSRF token validation
+  - [x] Test session rotation
 - [x] Meet operations tests (Implemented but coverage pending)
   - [x] Test meet creation
   - [x] Test meet joining
   - [x] Test meet publication
-- [x] Config loading tests (26.92% coverage)
+- [x] Config loading tests (46.15% coverage)
   - [x] Test environment variable loading
   - [x] Test config file loading
   - [x] Test default values
-- [ ] Storage tests (76.81% coverage)
+  - [ ] Test config file loading from custom paths
+  - [ ] Test environment variable overrides
+- [x] Storage tests (76.81% coverage)
+  - [x] Test basic file operations
   - [ ] Test concurrent file operations
   - [ ] Test error handling during file operations
   - [ ] Test edge cases like file system full
-- [x] Rate limiting tests (Implemented but coverage pending)
+- [x] Rate limiting tests (71.11% coverage)
   - [x] Test rate limit enforcement
   - [x] Test rate limit window sliding
   - [x] Test rate limit bypass for certain operations
-- [x] Middleware tests (Moved to new structure)
+- [x] Middleware tests (7.14% coverage)
   - [x] Test basic router
 
 ## Integration Tests
@@ -142,38 +153,45 @@ Overall coverage: **39.85%** (326/818 lines covered)
   - [ ] Measure under concurrent access
 
 ## Test Improvement Notes
-- The WebSocket handler has seen significant improvement in test coverage, but complex logic around reconnection and conflict resolution needs more targeted tests.
-- We've added initial WebSocket router tests, increasing coverage from 0% to 4.82%, but significant parts remain untested.
-- New unit tests have been added for:
-  - Password authentication
-  - Error handling
-  - Rate limiting
-  - Meet operations
-- Existing tests have been relocated to the new test structure:
-  - Config tests
-  - Middleware tests
-- Integration tests are now being developed in the new structure as well.
-- The test directory structure has been reorganized:
-  - `tests/unit/`: Unit tests for individual components
-  - `tests/integration/`: Integration tests for component interactions
-  - `tests/e2e/`: End-to-end tests (including shell scripts)
-  - `tests/performance/`: Performance benchmarks (skeleton implemented)
-- Further improvements should focus on:
-  - Handlers/live.rs (0% coverage)
-  - Session management (44% coverage)
-  - WebSocket router (4.82% coverage)
-- **Action items**:
-  - Fix integration of the new test structure with the build system
-  - Adapt test skeletons to match the actual API 
+- The WebSocket handler has seen significant improvement in test coverage, now at 42.74% (up from 37.05%).
+- WebSocket router tests have dramatically improved from 5.97% to 71.64% after fixing session directory issues.
+- **All 58 tests in backend-lib crate and all 33 tests in tests crate are now passing successfully.**
+- Added tests for handlers/live.rs, increasing coverage from 0% to 25.32%.
+- We've addressed the root causes of testing failures:
+  - **Session Directory Structure**: Most test failures were caused by missing session directories
+  - **Version Compatibility**: Some failures were due to incompatibility with the current axum API
+  - **Configuration Issues**: Tests were using default settings rather than test-specific configurations
+- The overall test coverage has increased from 50.71% to 51.79%.
 
---------
-Recall: my rule in all cases is that we don't want work arounds to just make the tests pass. We want to find the root cause thats causing failure or time-outs and deal with the root cause. Its almost always caused by a problem. Please take note for future reference
+## Remaining Focus Areas
+1. Continue improving coverage for `handlers/live.rs` (currently at 25.32%)
+2. Add tests for `meet.rs` (currently at 0% coverage)
+3. Improve middleware test coverage (currently at 7.14%)
+4. Add tests for `messages.rs` (currently at 0% coverage)
 
-Now that some of the tests are passing, lets:
-- remove any time-outs from the tests. instead of using time-outs, we need to analyse why the tests are failing/hanging and deal with the root cause
-- deal with any tests that are current commented out or skipped, eg `config_tests.rs`, `auth_flow_tests.rs`
-- build out any tests that have comments saying "skeleton" eg `meet_tests.rs`, `ws_router_tests.rs`
-- check test coverage using tarpaulin and update `test_coverage.md` file
-- include integration tests in pre-commit hooks
-- include any other tests from our new test suite that are appropriate for precommit hooks
-- run the precommit hooks
+## Next Steps
+- Add more test cases for handlers/live.rs
+- Create test utilities for common test setup code
+- Implement tests for meet.rs
+- Continue building out unit tests
+- Add integration tests for middleware components
+- Set up pre-commit hooks to run tests automatically
+- Ensure test environments properly initialize session directories
+
+## Action Items
+- Continue building out unit tests for files with low or zero coverage
+- Focus next on handlers/live.rs tests
+- Create a test utilities module to share common test setup logic
+- Set up pre-commit hooks to run tests automatically
+- Ensure test environments properly initialize session directories
+
+## Development Notes
+When writing tests, remember:
+- Fix one test at a time
+- Deal with the root cause of the test failure, don't work around the problem
+- We have a lot of tests filtered out. We need to deal with that
+- Create a proper test environment with temporary directories
+- Always ensure the sessions directory exists in test environment
+- Configure test-specific Settings objects 
+- Don't use workarounds - address root causes of test failures
+- Test session handling is critical for most components

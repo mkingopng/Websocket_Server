@@ -1056,11 +1056,19 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
 
-        // Create app state
+        // Create settings with the temp directory path
+        let mut settings = crate::config::Settings::default();
+        settings.storage.path = temp_dir.path().to_path_buf();
+
+        // Ensure the sessions directory exists
+        let sessions_dir = temp_dir.path().join("sessions");
+        std::fs::create_dir_all(&sessions_dir).expect("Failed to create sessions directory");
+
+        // Create app state with proper error handling
         let state = Arc::new(
-            AppState::new(storage.clone(), &crate::config::Settings::default())
+            AppState::new(storage.clone(), &settings)
                 .await
-                .unwrap(),
+                .expect("Failed to create AppState for test"),
         );
 
         // Create handler

@@ -65,6 +65,8 @@ This document tracks the development progress of the WebSocket server implementa
   - [x] Audit error messages for sensitive data
   - [x] Implement generic error messages for production
 
+### Other features?
+
 ### 5. Testing
 - [x] Create comprehensive unit tests
   - [x] Input validation tests
