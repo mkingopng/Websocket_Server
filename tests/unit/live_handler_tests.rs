@@ -1,7 +1,7 @@
 // ============================
 // tests/unit/live_handler_tests.rs
 // ============================
-// Unit tests for the live WebSocket handlers
+//! Unit tests for the live WebSocket handlers
 
 // Allow clippy warnings in test code
 #![allow(clippy::uninlined_format_args)]

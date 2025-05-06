@@ -26,6 +26,7 @@ use metrics::{counter, gauge};
 use std::net::SocketAddr;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::mpsc;
+use tower_http::trace::TraceLayer;
 
 static ACTIVITY_TIMES: LazyLock<DashMap<String, u64>> = LazyLock::new(DashMap::new);
 
@@ -35,7 +36,14 @@ pub fn create_router<S: Storage + Send + Sync + Clone + 'static>(
 ) -> Router {
     Router::new()
         .route("/ws", get(ws_handler))
+        .route("/health", get(health_handler))
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Health check endpoint
+async fn health_handler() -> &'static str {
+    "Healthy"
 }
 
 /// Handle WebSocket connections
@@ -44,6 +52,8 @@ async fn ws_handler<S: Storage + Send + Sync + Clone + 'static>(
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
+    tracing::debug!("WebSocket connection attempt from: {}", addr);
+
     // Create a handler - move it into the closure
     let mut handler = WebSocketHandler::new(state);
 
@@ -110,7 +120,7 @@ async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
 async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
     socket: WebSocket,
     mut handler: WebSocketHandler<S>,
-    _addr: SocketAddr,
+    addr: SocketAddr,
 ) {
     // Split the socket into sender and receiver
     let (mut sender, mut receiver) = socket.split();
@@ -125,76 +135,158 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
     // Keep track of the meet_id for this connection
     let mut connected_meet_id = String::new();
 
+    tracing::debug!("WebSocket connection established from: {}", addr);
+
     // Spawn a task to forward messages from the channel to the client
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             // Serialize the message to JSON
-            if let Ok(json) = serde_json::to_string(&msg) {
-                if sender.send(Message::Text(json.into())).await.is_err() {
-                    break;
-                }
+            match serde_json::to_string(&msg) {
+                Ok(json) => {
+                    tracing::debug!("Sending message to client: {}", json);
+                    if sender.send(Message::Text(json.into())).await.is_err() {
+                        tracing::error!("Failed to send message to client");
+                        break;
+                    }
+                },
+                Err(e) => {
+                    tracing::error!("Failed to serialize message: {}", e);
+                },
             }
         }
     });
 
     // Process incoming messages
-    while let Some(Ok(msg)) = receiver.next().await {
-        if let axum::extract::ws::Message::Text(text) = msg {
-            // Handle the message
-            if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
-                // Extract meet_id from message if present to update connected_meet_id
-                let meet_id = match &client_msg {
-                    ClientMessage::CreateMeet { meet_id, .. }
-                    | ClientMessage::JoinMeet { meet_id, .. }
-                    | ClientMessage::UpdateInit { meet_id, .. }
-                    | ClientMessage::ClientPull { meet_id, .. }
-                    | ClientMessage::PublishMeet { meet_id, .. }
-                    | ClientMessage::StateRecoveryResponse { meet_id, .. } => Some(meet_id.clone()),
-                };
+    while let Some(msg_result) = receiver.next().await {
+        match msg_result {
+            Ok(axum::extract::ws::Message::Text(text)) => {
+                tracing::debug!("Received message from client: {}", text);
 
-                if let Some(ref meet_id) = meet_id {
-                    // Always clone (first time) or clone_from (subsequent times)
-                    if connected_meet_id.is_empty() {
-                        #[allow(clippy::assigning_clones)]
-                        {
-                            // First assignment needs clone
-                            connected_meet_id = meet_id.clone();
-                        }
-                    } else {
-                        connected_meet_id.clone_from(meet_id);
-                    }
+                // Handle the message
+                let parse_result = serde_json::from_str::<ClientMessage>(&text);
+                match parse_result {
+                    Ok(client_msg) => {
+                        tracing::debug!("Successfully parsed message: {:?}", client_msg);
 
-                    // Only do this for join/connect operations
-                    match &client_msg {
-                        ClientMessage::JoinMeet { .. } | ClientMessage::ClientPull { .. } => {
-                            if let Err(e) = check_state_consistency(&mut handler, meet_id).await {
-                                eprintln!("Error checking state consistency: {e}");
+                        // Extract meet_id from message if present to update connected_meet_id
+                        let meet_id = match &client_msg {
+                            ClientMessage::CreateMeet { meet_id, .. }
+                            | ClientMessage::JoinMeet { meet_id, .. }
+                            | ClientMessage::UpdateInit { meet_id, .. }
+                            | ClientMessage::ClientPull { meet_id, .. }
+                            | ClientMessage::PublishMeet { meet_id, .. }
+                            | ClientMessage::StateRecoveryResponse { meet_id, .. } => {
+                                Some(meet_id.clone())
+                            },
+                        };
+
+                        if let Some(ref meet_id) = meet_id {
+                            // Always clone (first time) or clone_from (subsequent times)
+                            if connected_meet_id.is_empty() {
+                                #[allow(clippy::assigning_clones)]
+                                {
+                                    // First assignment needs clone
+                                    connected_meet_id = meet_id.clone();
+                                }
+                            } else {
+                                connected_meet_id.clone_from(meet_id);
                             }
-                        },
-                        _ => {},
-                    }
-                }
 
-                // Process the message
-                if let Ok(response) = handler.handle_message(client_msg).await {
-                    tx.send(response).await.ok();
+                            // Only do this for join/connect operations
+                            match &client_msg {
+                                ClientMessage::JoinMeet { .. }
+                                | ClientMessage::ClientPull { .. } => {
+                                    if let Err(e) =
+                                        check_state_consistency(&mut handler, meet_id).await
+                                    {
+                                        tracing::error!("Error checking state consistency: {}", e);
+                                    }
+                                },
+                                _ => {},
+                            }
+                        }
+
+                        // Process the message
+                        match handler.handle_message(client_msg).await {
+                            Ok(response) => {
+                                tracing::debug!("Handler produced response: {:?}", response);
+                                if tx.send(response).await.is_err() {
+                                    tracing::error!("Failed to send response through channel");
+                                    break;
+                                }
+                            },
+                            Err(e) => {
+                                tracing::error!("Error handling message: {}", e);
+                                if let Err(send_err) = tx
+                                    .send(ServerMessage::Error {
+                                        code: "HANDLER_ERROR".to_string(),
+                                        message: format!("Error processing request: {}", e),
+                                    })
+                                    .await
+                                {
+                                    tracing::error!("Failed to send error message: {}", send_err);
+                                    break;
+                                }
+                            },
+                        }
+                    },
+                    Err(e) => {
+                        // Malformed message - log the parse error and the text that failed to parse
+                        tracing::error!("Failed to parse message: {}", e);
+                        tracing::error!("Problematic message text: '{}'", text);
+
+                        // Try to determine if it's a JSON format issue or a different problem
+                        match serde_json::from_str::<serde_json::Value>(&text) {
+                            Ok(value) => {
+                                tracing::error!("Message is valid JSON but doesn't match ClientMessage structure: {:?}", value);
+
+                                // Check if the 'type' field is present
+                                if let Some(msg_type) = value.get("type").and_then(|t| t.as_str()) {
+                                    tracing::error!(
+                                        "Message type '{}' found, but structure is incorrect",
+                                        msg_type
+                                    );
+                                } else {
+                                    tracing::error!("No 'type' field found in message");
+                                }
+                            },
+                            Err(json_err) => {
+                                tracing::error!("Message is not valid JSON: {}", json_err);
+                            },
+                        }
+
+                        if let Err(send_err) = tx
+                            .send(ServerMessage::MalformedMessage {
+                                err_msg: format!("Invalid message format: {}", e),
+                            })
+                            .await
+                        {
+                            tracing::error!(
+                                "Failed to send malformed message response: {}",
+                                send_err
+                            );
+                            break;
+                        }
+                    },
                 }
-            } else {
-                // Malformed message
-                if let Err(e) = tx
-                    .send(ServerMessage::MalformedMessage {
-                        err_msg: "Invalid message format".to_string(),
-                    })
-                    .await
-                {
-                    eprintln!("Error sending malformed message response: {e}");
-                }
-            }
+            },
+            Ok(axum::extract::ws::Message::Close(_)) => {
+                tracing::debug!("Client disconnected: {}", addr);
+                break;
+            },
+            Ok(_) => {
+                // Ignore other message types
+            },
+            Err(e) => {
+                tracing::error!("WebSocket error: {}", e);
+                break;
+            },
         }
     }
 
     // When the connection is closed, unregister the client
     if !connected_meet_id.is_empty() {
+        tracing::debug!("Unregistering client for meet: {}", connected_meet_id);
         handler.unregister_client(&connected_meet_id);
     }
 
@@ -203,6 +295,7 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
 
     // Update metrics
     let _ = gauge!("ws.active", &[("value", "-1")]);
+    tracing::debug!("WebSocket connection closed: {}", addr);
 }
 
 #[cfg(test)]
@@ -328,12 +421,9 @@ mod tests {
 
         // Verify serialization
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["type"].as_str().unwrap(), "Error");
-        assert_eq!(parsed["payload"]["code"].as_str().unwrap(), "TEST_ERROR");
-        assert_eq!(
-            parsed["payload"]["message"].as_str().unwrap(),
-            "This is a test error"
-        );
+        assert_eq!(parsed["msgType"].as_str().unwrap(), "Error");
+        assert_eq!(parsed["code"].as_str().unwrap(), "TEST_ERROR");
+        assert_eq!(parsed["message"].as_str().unwrap(), "This is a test error");
     }
 
     #[tokio::test]

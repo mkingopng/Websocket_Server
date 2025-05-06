@@ -1,0 +1,7 @@
+{
+  "msgType": "CreateMeet",
+  "meet_id": "test-meet-1",
+  "password": "TestPassword123!",
+  "location_name": "Test Location",
+  "priority": 10
+}

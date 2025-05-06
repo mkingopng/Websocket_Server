@@ -33,6 +33,7 @@ chrono = { version = "0.4.34", features = ["serde"] }
 base64 = "0.21.7"
 aes-gcm = "0.10.3"
 tempfile = "3.10.1"
+tower-http.workspace = true
 
 [dev-dependencies]
 tokio    = { workspace = true, features = ["full"] }

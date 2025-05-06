@@ -1,3 +1,7 @@
+// =============
+// tests/unit/ws_router_tests.rs
+// =============
+//! This test suite is designed to validate the functionality of the `WebSocketHandler`
 use backend_lib::config::Settings;
 use backend_lib::messages::ServerMessage;
 use backend_lib::storage::FlatFileStorage;

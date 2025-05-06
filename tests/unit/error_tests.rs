@@ -2,6 +2,11 @@
 // tests/unit/error_tests.rs
 // =========================
 //! Unit tests for the error module
+
+// Allow clippy warnings in test code
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::manual_flatten)]
+
 use axum::http::StatusCode;
 use backend_lib::error::AppError;
 use std::io::{Error as IoError, ErrorKind};

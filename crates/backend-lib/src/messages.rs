@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload")]
+#[serde(tag = "msgType")]
 pub enum ClientMessage {
     CreateMeet {
         meet_id: String,
@@ -45,7 +45,7 @@ pub enum ClientMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload")]
+#[serde(tag = "msgType")]
 pub enum ServerMessage {
     MeetCreated {
         meet_id: String,
@@ -150,4 +150,50 @@ pub struct MeetInfo {
     pub meet_id: String,
     pub password_hash: String,
     pub clients: Vec<ClientInfo>,
+}
+
+// Add a test function to verify message serialization formats
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_client_message_serialization() {
+        // Test CreateMeet message
+        let create_meet = ClientMessage::CreateMeet {
+            meet_id: "test-meet".to_string(),
+            password: "TestPassword123!".to_string(),
+            location_name: "Test Location".to_string(),
+            priority: 10,
+        };
+
+        let json = serde_json::to_string_pretty(&create_meet).unwrap();
+        println!("CreateMeet serialized: {}", json);
+
+        // Verify the structure
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["msgType"], "CreateMeet");
+        assert_eq!(parsed["meet_id"], "test-meet");
+        assert_eq!(parsed["password"], "TestPassword123!");
+        assert_eq!(parsed["location_name"], "Test Location");
+        assert_eq!(parsed["priority"], 10);
+
+        // Test parsing from JSON
+        let parsed_msg: ClientMessage = serde_json::from_str(&json).unwrap();
+        match parsed_msg {
+            ClientMessage::CreateMeet {
+                meet_id,
+                password,
+                location_name,
+                priority,
+            } => {
+                assert_eq!(meet_id, "test-meet");
+                assert_eq!(password, "TestPassword123!");
+                assert_eq!(location_name, "Test Location");
+                assert_eq!(priority, 10);
+            },
+            _ => panic!("Wrong variant"),
+        }
+    }
 }

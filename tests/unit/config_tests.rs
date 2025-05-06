@@ -2,6 +2,11 @@
 // tests/unit/config_tests.rs
 // ==========================
 //! Unit tests for the configuration module
+
+// Allow clippy warnings in test code
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::manual_flatten)]
+
 use backend_lib::config::{
     RateLimitSettings, ServerSettings, Settings, SettingsManager, StorageSettings,
 };

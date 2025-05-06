@@ -2,6 +2,10 @@
 //!
 //! This crate contains tests for the WebSocket Server.
 
+// Common test utilities - export for use in all test modules
+#[path = "test_utils.rs"]
+pub mod test_utils;
+
 #[cfg(test)]
 mod unit {
     // Unit tests

@@ -1,3 +1,7 @@
+// =============
+// tests/integration/auth_flow_tests.rs
+// =============
+//! Integration tests for the authentication flow in the backend library.
 use backend_lib::auth::{AuthService, DefaultAuth, PersistentSessionManager};
 use tempfile::tempdir;
 

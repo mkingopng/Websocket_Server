@@ -1,6 +1,3 @@
-// use std::time::{Duration, Instant};
-// use tokio::time;
-
 /// Performance test for WebSocket message throughput
 ///
 /// This test measures:

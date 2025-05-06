@@ -2,11 +2,10 @@
 // crates/backend-lib/src/websocket.rs
 // ==================
 /** WebSocket Handler Module
-
 This module implements the WebSocket handler for the `OpenLifter` backend server.
 It provides functionality for handling WebSocket connections and messages.
 
-Features include:
+Features:
 - Connection state management
 - Message routing
 - Session validation
@@ -26,30 +25,34 @@ define the protocol between the client and server.
 When multiple clients update the same "location" (data entity), the handler
 resolves conflicts based on client priority levels, with higher priority updates
 taking precedence.*/
-use crate::messages::{ClientMessage, ServerMessage, Update, UpdateWithMetadata};
-use crate::storage::Storage;
-use crate::AppState;
+use crate::{
+    messages::{ClientMessage, ServerMessage, Update, UpdateWithMetadata},
+    storage::Storage,
+    validation, AppState,
+};
 use anyhow::{anyhow, Result};
 use serde_json;
-use std::net::IpAddr;
-use std::sync::Arc;
+use std::{net::IpAddr, sync::Arc};
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
+use tracing::{debug, error, info};
 use uuid::Uuid;
-
 /// Maximum number of reconnection attempts before giving up
 const MAX_RECONNECT_ATTEMPTS: u8 = 5;
+
 /// Base delay between reconnection attempts in milliseconds
 const RECONNECT_DELAY_MS: u64 = 1000; // 1 second
 
 /// WebSocket handler for processing messages
-pub struct WebSocketHandler<S: Storage + Send + Sync + Clone + 'static> {
+pub struct WebSocketHandler<S> {
+    /// Application state
     state: Arc<AppState<S>>,
+    /// Client IP address
+    client_ip: Option<IpAddr>,
     client_id: String,
     client_tx: Option<mpsc::Sender<ServerMessage>>,
     client_priority: u8,
     reconnect_attempts: u8,
-    client_ip: Option<IpAddr>,
 }
 
 impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
@@ -291,39 +294,21 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     /// or after restart. It broadcasts a request to all connected clients
     /// to send their update logs.
     pub async fn initiate_state_recovery(&self, meet_id: &str, last_known_seq: u64) -> Result<()> {
-        println!("State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}");
+        info!("Initiating state recovery for meet: {}", meet_id);
 
-        // Create recovery request message
-        let recovery_msg = ServerMessage::StateRecoveryRequest {
-            meet_id: meet_id.to_string(),
-            last_known_seq,
-        };
-
-        // Send to all connected clients for this meet
+        // Get all clients for this meet
         if let Some(clients) = self.state.clients.get(meet_id) {
-            let client_count = clients.len();
+            let recovery_request = ServerMessage::StateRecoveryRequest {
+                meet_id: meet_id.to_string(),
+                last_known_seq,
+            };
 
-            // Use a JoinSet to send to all clients concurrently
-            let mut send_tasks = tokio::task::JoinSet::new();
-
-            for client in clients.iter() {
-                let client_clone = client.clone();
-                let recovery_msg_clone = recovery_msg.clone();
-
-                send_tasks.spawn(async move { client_clone.send(recovery_msg_clone).await });
-            }
-
-            // Wait for tasks to complete
-            while let Some(result) = send_tasks.join_next().await {
-                // Just log errors
-                if let Err(e) = result {
-                    println!("Error sending recovery request: {e}");
+            // Send recovery request to all clients
+            for client in clients.value() {
+                if let Err(e) = client.send(recovery_request.clone()).await {
+                    error!("Error sending recovery request: {}", e);
                 }
             }
-
-            println!("State recovery requested from {client_count} clients for meet {meet_id}");
-        } else {
-            println!("No clients connected for meet {meet_id}, recovery not possible");
         }
 
         Ok(())
@@ -429,6 +414,18 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     /// - Validation errors
     #[allow(clippy::too_many_lines)]
     pub async fn handle_message(&mut self, msg: ClientMessage) -> Result<ServerMessage> {
+        debug!("Processing message: {:?}", msg);
+
+        // Validate the message
+        if let Err(e) = validation::validate_client_message(&msg) {
+            error!("Validation error: {}", e);
+            return Ok(ServerMessage::Error {
+                code: "VALIDATION_ERROR".to_string(),
+                message: e.to_string(),
+            });
+        }
+
+        // Process the message based on its type
         match msg {
             ClientMessage::CreateMeet {
                 meet_id,
@@ -436,6 +433,12 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 location_name,
                 priority,
             } => {
+                info!("Creating meet: {}", meet_id);
+                debug!(
+                    "Creating meet '{}' with location '{}' at priority {}",
+                    meet_id, location_name, priority
+                );
+
                 // Validate inputs
                 let meet_id = match crate::validation::validate_meet_id(&meet_id) {
                     Ok(id) => id,
@@ -526,6 +529,12 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 location_name,
                 priority,
             } => {
+                info!("Joining meet: {}", meet_id);
+                debug!(
+                    "Joining meet '{}' with location '{}' at priority {}",
+                    meet_id, location_name, priority
+                );
+
                 // Validate inputs
                 let meet_id = match crate::validation::validate_meet_id(&meet_id) {
                     Ok(id) => id,
@@ -607,6 +616,12 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 session_token,
                 updates,
             } => {
+                debug!(
+                    "Update init for meet: {} with {} updates",
+                    meet_id,
+                    updates.len()
+                );
+
                 // Validate meet ID
                 let meet_id = match crate::validation::validate_meet_id(&meet_id) {
                     Ok(id) => id.to_string(),
@@ -799,6 +814,11 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 session_token,
                 last_server_seq,
             } => {
+                debug!(
+                    "Client pull for meet: {} since seq {}",
+                    meet_id, last_server_seq
+                );
+
                 // Validate meet ID
                 let meet_id = match crate::validation::validate_meet_id(&meet_id) {
                     Ok(id) => id.to_string(),
@@ -926,6 +946,8 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 return_email,
                 opl_csv,
             } => {
+                info!("Publishing meet: {}", meet_id);
+
                 // Validate meet ID
                 let meet_id = match crate::validation::validate_meet_id(&meet_id) {
                     Ok(id) => id.to_string(),
@@ -986,6 +1008,8 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 updates,
                 priority,
             } => {
+                info!("State recovery response for meet: {}", meet_id);
+
                 // Validate meet ID
                 let meet_id = match crate::validation::validate_meet_id(&meet_id) {
                     Ok(id) => id.to_string(),
