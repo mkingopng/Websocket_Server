@@ -89,7 +89,29 @@ cargo hack --feature-powerset --each-feature test
 
 # Run specific test
 cargo test -p openlifter-backend-lib test_name
+
+# Run E2E tests
+cd tests/e2e
+./websocket_test.sh
+./network_resilience_test.sh
 ```
+
+#### Test Structure
+
+The tests are organized in the following structure:
+
+```
+tests/
+├── e2e/               # End-to-end tests (shell scripts)
+│   ├── websocket_test.sh
+│   └── network_resilience_test.sh
+├── integration/       # Integration tests
+├── performance/       # Performance tests
+├── unit/              # Unit tests
+└── README.md          # Documentation
+```
+
+For more details about test coverage, see [documentation/test_coverage.md](documentation/test_coverage.md).
 
 ### Running
 

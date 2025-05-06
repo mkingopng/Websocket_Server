@@ -1,19 +1,16 @@
 // ============================
-// openlifter-backend-lib/src/config.rs
+// crates/backend-lib/src/config.rs
 // ============================
-//! Configuration management for the `OpenLifter` server.
-//! 
-//! This module handles loading and validating configuration from various sources:
-//! 1. Environment variables
-//! 2. Configuration file
-//! 3. Default values
-//! 
-//! The configuration is loaded in that order, with later sources taking precedence.
-
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use config::{Config, ConfigError};
+/** Configuration management for the `OpenLifter` server.
+This module handles loading and validating configuration from various sources:
+1. Environment variables
+2. Configuration file
+3. Default values
+The configuration is loaded in that order, with later sources taking precedence */
 use anyhow::Result;
+use config::{Config, ConfigError};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,11 +139,26 @@ fn default_rate_limit() -> RateLimitSettings {
     }
 }
 
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            server: ServerSettings {
+                port: 8080,
+                host: "127.0.0.1".to_string(),
+            },
+            storage: StorageSettings {
+                path: PathBuf::from("data"),
+            },
+            rate_limit: default_rate_limit(),
+        }
+    }
+}
+
 #[cfg(test)]
-mod tests {
+mod config_tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     fn create_test_config() -> Settings {
         Settings {
@@ -173,7 +185,7 @@ mod tests {
     fn test_custom_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");
-        
+
         let config_content = r#"
             [server]
             host = "custom_host"
@@ -186,22 +198,28 @@ mod tests {
             max_requests = 150
             window_secs = 90
         "#;
-        
+
         fs::write(&config_path, config_content).unwrap();
-        
+
         let mut custom_config = create_test_config();
         custom_config.server.host = "custom_host".to_string();
         custom_config.server.port = 8080;
         custom_config.storage.path = PathBuf::from("custom_data");
-        custom_config.rate_limit = RateLimitSettings { 
-            max_requests: 150, 
-            window_secs: 90 
+        custom_config.rate_limit = RateLimitSettings {
+            max_requests: 150,
+            window_secs: 90,
         };
-        
+
         assert_eq!(custom_config.server.port, 8080);
         assert_eq!(custom_config.server.host, "custom_host");
         assert_eq!(custom_config.storage.path, PathBuf::from("custom_data"));
-        assert_eq!(custom_config.rate_limit, RateLimitSettings { max_requests: 150, window_secs: 90 });
+        assert_eq!(
+            custom_config.rate_limit,
+            RateLimitSettings {
+                max_requests: 150,
+                window_secs: 90
+            }
+        );
     }
 
     #[test]
@@ -210,8 +228,8 @@ mod tests {
         let mut custom_config = create_test_config();
         custom_config.server.port = 9000;
         custom_config.server.host = "custom_host".to_string();
-        
+
         assert_eq!(custom_config.server.port, 9000);
         assert_eq!(custom_config.server.host, "custom_host");
     }
-} 
+}

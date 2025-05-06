@@ -1,0 +1,28 @@
+[package]
+name = "websocket-server-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "websocket_server_tests"
+path = "lib.rs"
+
+[dependencies]
+backend-lib = { path = "../crates/backend-lib" }
+openlifter-common = { path = "../crates/common" }
+
+tokio = { version = "1.44.2", features = ["full"] }
+axum = { version = "0.8.3", features = ["ws", "macros"] }
+tower = { version = "0.4.13", features = ["util"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.114"
+tempfile = "3.10.0"
+futures-util = "0.3.30"
+anyhow = "1.0.80"
+thiserror = "1.0.57"
+tower-http = { version = "0.6.2", features = ["cors", "trace"] }
+tracing = { version = "0.1.40", features = ["attributes"] }
+rand = "0.8.5"
+async-trait = "0.1.88"
+dashmap = "5.5.3" 

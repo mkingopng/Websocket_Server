@@ -1,14 +1,13 @@
+// ============
+// crates/backend-lib/src/middleware/rate_limit.rs
+// ============
+//! Rate limiting middleware
+use crate::storage::Storage;
+use crate::{error::AppError, AppState};
+use axum::{extract::State, http::Request, middleware::Next, response::Response};
+use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use axum::{
-    middleware::Next,
-    response::Response,
-    http::Request,
-    extract::State,
-};
-use dashmap::DashMap;
-use crate::{AppState, error::AppError};
-use crate::storage::Storage;
 
 /// Rate limiter middleware
 pub async fn rate_limit<S: Storage + Send + Sync + 'static>(
@@ -55,12 +54,13 @@ impl RateLimiter {
 
     pub fn check_rate_limit(&self, client_ip: &str) -> bool {
         let now = Instant::now();
-        let mut entry = self.entries.entry(client_ip.to_string()).or_insert_with(|| {
-            RateLimitEntry {
+        let mut entry = self
+            .entries
+            .entry(client_ip.to_string())
+            .or_insert_with(|| RateLimitEntry {
                 last_request: now,
                 count: 0,
-            }
-        });
+            });
 
         if now.duration_since(entry.last_request) > self.window {
             entry.count = 1;
@@ -74,9 +74,8 @@ impl RateLimiter {
 
     pub fn clear_expired(&self) {
         let now = Instant::now();
-        self.entries.retain(|_, entry| {
-            now.duration_since(entry.last_request) <= self.window
-        });
+        self.entries
+            .retain(|_, entry| now.duration_since(entry.last_request) <= self.window);
     }
 }
 
@@ -91,8 +90,5 @@ pub fn check_rate_limit<S: Storage + Send + Sync + 'static>(
 }
 
 pub fn init_rate_limiter<S: Storage + Send + Sync + 'static>(state: &mut AppState<S>) {
-    state.rate_limiter = Arc::new(RateLimiter::new(
-        Duration::from_secs(60),
-        100,
-    ));
-} 
+    state.rate_limiter = Arc::new(RateLimiter::new(Duration::from_secs(60), 100));
+}
