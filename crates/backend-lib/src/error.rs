@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/error.rs
-// ============================
+
 //! Central error type + Axum integration.
 use axum::{
     http::StatusCode,

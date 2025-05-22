@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/error.rs
-// ============================
+
 //! Meet management and actor coordination.
 use crate::{
     meet_actor::{spawn_meet_actor, MeetHandle},

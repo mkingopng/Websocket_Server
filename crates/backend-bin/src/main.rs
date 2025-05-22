@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-bin/src/main.rs
-// ============================
+
 //! Backend server for the application.
 use backend_lib::{config::Settings, storage::FlatFileStorage, ws_router, AppState};
 use std::fs;

@@ -42,8 +42,7 @@ mod tests {
 
         assert_ne!(token1, token2);
 
-        // Test token length - 32 bytes of entropy encoded in base64
-        // should be about 43-44 characters
+        // Test token length - 32 bytes of entropy encoded in base64. should be about 43-44 char
         assert!(token1.len() >= 42);
 
         // Test custom size

@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/handlers/live.rs
-// ============================
+
 //! Live WebSocket handlers.
 use crate::auth::{
     hash_password, validate_password_strength, verify_password, PasswordRequirements,
@@ -33,23 +32,21 @@ fn update_session_metrics(event_type: &str, updates_len: Option<usize>, csv_len:
     }
 }
 
-/// Handler for live session events
-///
-/// This handler processes various live session events like:
-/// - `created`: When a new live session is created
-/// - `joined`: When a user joins a live session
-/// - `updated`: When a live session is updated
-/// - `published`: When a live session is published
-/// - `ended`: When a live session ends
-///
-/// The handler validates the session token and user ID, then processes
-/// the event based on its type. For each event type, it:
-/// 1. Validates the session exists and belongs to the user
-/// 2. Updates the session state
-/// 3. Records metrics
-/// 4. Returns appropriate response
-///
-/// Handle a client message
+/** Handler for live session events
+This handler processes various live session events like:
+- `created`: When a new live session is created
+- `joined`: When a user joins a live session
+- `updated`: When a live session is updated
+- `published`: When a live session is published
+- `ended`: When a live session ends
+
+The handler validates the session token and user ID, then processes
+the event based on its type. For each event type, it:
+1. Validates the session exists and belongs to the user
+2. Updates the session state
+3. Records metrics
+4. Returns appropriate response
+Handle a client message */
 #[allow(clippy::too_many_lines)]
 pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
     msg: ClientToServer,

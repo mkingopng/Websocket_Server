@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/auth/persistent_session.rs
-// ============================
+
 /** Persistent session storage with encryption
 This module extends the SessionManager with persistent storage capabilities,
 allowing sessions to survive server restarts. */

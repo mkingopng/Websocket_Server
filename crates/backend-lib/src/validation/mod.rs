@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/validation/mod.rs
-// ============================
+
 //! Message validation module.
 use crate::messages::{ClientMessage, Update};
 use regex::Regex;

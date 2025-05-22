@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/auth/session.rs
-// ============================
+
 //! Session token handling and management.
 use super::{token_generator::generate_secure_token, AuthService};
 use crate::messages::Session;

@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/ws_router.rs
-// ============================
+
 /** WebSocket router for the `OpenLifter` server.
 This module handles WebSocket connections and routes messages
 to the appropriate handlers. */

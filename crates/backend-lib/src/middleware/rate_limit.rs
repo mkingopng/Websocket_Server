@@ -1,6 +1,5 @@
-// ============
 // crates/backend-lib/src/middleware/rate_limit.rs
-// ============
+
 //! Rate limiting middleware
 use crate::storage::Storage;
 use crate::{error::AppError, AppState};

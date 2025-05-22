@@ -1,25 +1,22 @@
-// ============================
 // openlifter-backend-lib/src/storage.rs
-// ============================
-//! Storage abstraction with flat-file implementation.
-//! This module provides a trait-based storage abstraction for meet data,
-//! with a flat-file implementation that stores data in a simple directory structure:
-//!
-//! ```text
-//! data/
-//! |-- current-meets/
-//! |   |-- {meet_id}/
-//! |       |-- updates.log      # Append-only log of updates
-//! |       |-- meet-info.json   # Meet metadata (password hash, endpoints)
-//! |       |-- meet.csv         # Final meet results
-//! |       |-- return-email.txt # Email for results
-//! |-- finished-meets/
-//!     |-- {meet_id}/           # Archived meets
-//! ```
-//!
-//! The storage is designed to be simple and reliable, with atomic operations
-//! where possible. The flat-file implementation is suitable for most use cases
-//! and provides good performance for the expected load.
+
+/** Storage abstraction with flat-file implementation.
+This module provides a trait-based storage abstraction for meet data,
+with a flat-file implementation that stores data in a simple directory structure:
+
+data/
+|-- current-meets/
+|   |-- {meet_id}/
+|       |-- updates.log      # Append-only log of updates
+|       |-- meet-info.json   # Meet metadata (password hash, endpoints)
+|       |-- meet.csv         # Final meet results
+|       |-- return-email.txt # Email for results
+|-- finished-meets/
+     |-- {meet_id}/           # Archived meets
+
+The storage is designed to be simple and reliable, with atomic operations
+where possible. The flat-file implementation is suitable for most use cases
+and provides good performance for the expected load. */
 
 use crate::error::AppError;
 use async_trait::async_trait;

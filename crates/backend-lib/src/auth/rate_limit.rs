@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/auth/rate_limit.rs
-// ============================
+
 //! Rate limiting for authentication attempts.
 
 use dashmap::DashMap;

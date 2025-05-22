@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/meet_actor.rs
-// ============================
+
 //! Meet actor module
 use crate::{error::AppError, storage::Storage};
 use metrics::{counter, histogram};

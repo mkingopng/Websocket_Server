@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/config.rs
-// ============================
+
 /** Configuration management for the `OpenLifter` server.
 This module handles loading and validating configuration from various sources:
 1. Environment variables

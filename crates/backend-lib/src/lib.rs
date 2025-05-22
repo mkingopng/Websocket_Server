@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/lib.rs
-// ============================
+
 #![allow(clippy::all, clippy::nursery, clippy::pedantic)]
 
 pub mod auth;

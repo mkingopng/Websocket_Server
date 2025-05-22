@@ -11,13 +11,12 @@ serde       = { version = "1.0.219", features = ["derive"] }
 serde_json  = "1.0.114"
 tracing     = { version = "0.1.40", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
-dashmap     = "5.5.3"
+dashmap     = "6.1.0"
 uuid        = { version = "1.7.0", features = ["v4"] }
 scrypt      = "0.11.0"
-rand        = "0.8.5"
+rand        = "0.9.1"
 anyhow      = "1.0.80"
-thiserror   = "1.0.57"
+thiserror   = "2.0.12"
 futures-util = "0.3.30"
-hyper       = "1.1.0"
-tower       = { version = "0.4.13", features = ["util"] }
+tower       = { version = "0.5.2", features = ["util"] }
 tempfile    = "3.10.0"

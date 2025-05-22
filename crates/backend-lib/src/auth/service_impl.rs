@@ -1,6 +1,5 @@
-// ==========
 // crates/backend-lib/src/auth/service_impl.rs
-// ===========
+
 //! Authentication service implementation
 use crate::auth::{AuthRateLimiter, AuthService, PersistentSessionManager};
 use crate::error::AppError;

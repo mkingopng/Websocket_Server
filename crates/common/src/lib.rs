@@ -1,6 +1,5 @@
-// ================
 // common/src/lib.rs
-// ================
+
 //! Common types and structures
 //! used for communication between the `OpenLifter` client and server.
 //! This module defines the WebSocket protocol messages and supporting types.
@@ -139,26 +138,26 @@ pub enum ServerToClient {
     },
     /// Response to client pull request
     ServerPull {
-        /// Current server sequence number
+        // Current server sequence number
         last_server_seq: Seq,
-        /// Updates since client's last seen sequence
+        // Updates since client's last seen sequence
         updates_relayed: Vec<UpdateWithServerSeq>,
     },
-    /// Acknowledgment of meet publication
+    // Acknowledgment of meet publication
     PublishAck,
-    /// Error response for malformed messages
+    // Error response for malformed messages
     MalformedMessage {
-        /// Error description
+        // Error description
         err_msg: String,
     },
-    /// Error response for unknown message types
+    // Error response for unknown message types
     UnknownMessageType {
-        /// The unknown message type
+        // The unknown message type
         msg_type: String,
     },
-    /// Error response for invalid sessions
+    // Error response for invalid sessions
     InvalidSession {
-        /// The invalid session token
+        // The invalid session token
         session_token: String,
     },
 }
@@ -166,8 +165,8 @@ pub enum ServerToClient {
 /// Meet information stored on the server
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MeetInfo {
-    /// Hashed meet password
+    // Hashed meet password
     pub password_hash: String,
-    /// List of endpoints with priorities
+    // List of endpoints with priorities
     pub endpoints: Vec<EndpointPriority>,
 }

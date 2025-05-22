@@ -1,6 +1,5 @@
-// ==================
 // crates/backend-lib/src/websocket.rs
-// ==================
+
 /** WebSocket Handler Module
 This module implements the WebSocket handler for the `OpenLifter` backend server.
 It provides functionality for handling WebSocket connections and messages.
@@ -25,6 +24,7 @@ define the protocol between the client and server.
 When multiple clients update the same "location" (data entity), the handler
 resolves conflicts based on client priority levels, with higher priority updates
 taking precedence.*/
+
 use crate::{
     messages::{ClientMessage, ServerMessage, Update, UpdateWithMetadata},
     storage::Storage,
@@ -1064,6 +1064,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     }
 }
 
+// need to move this into  seperate file
 #[cfg(test)]
 mod tests {
     use super::*;

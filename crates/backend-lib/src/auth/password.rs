@@ -1,6 +1,6 @@
-// ============================
+
 // crates/backend-lib/src/auth/password.rs
-// ============================
+
 //! Password hashing and verification.
 use argon2::Argon2;
 use scrypt::{

@@ -1,6 +1,5 @@
-// ============================
 // crates/backend-lib/src/auth/mod.rs
-// ============================
+
 //! Authentication module.
 pub mod password;
 pub mod persistent_session;
