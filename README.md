@@ -88,7 +88,7 @@ cargo test --workspace
 cargo hack --feature-powerset --each-feature test
 
 # Run specific test
-cargo test -p openlifter-backend-lib test_name
+cargo test -p openlifter-server-app test_name
 
 # Run E2E tests
 cd tests/e2e
@@ -117,13 +117,13 @@ For more details about test coverage, see [documentation/test_coverage.md](docum
 
 ```bash
 # Run with default settings
-cargo run -p openlifter-backend-lib-bin
+cargo run -p openlifter-server-app-bin
 
 # Run with custom config
-cargo run -p openlifter-backend-lib-bin -- --config config.toml
+cargo run -p openlifter-server-app-bin -- --config config.toml
 
 # Run with custom bind address
-cargo run -p openlifter-backend-lib-bin -- --bind 0.0.0.0:3000
+cargo run -p openlifter-server-app-bin -- --bind 0.0.0.0:3000
 ```
 
 ### Important Cargo Commands
@@ -148,12 +148,12 @@ These commands are essential for development:
 
 Build the image:
 ```bash
-docker build -t openlifter-backend-lib .
+docker build -t openlifter-server-app .
 ```
 
 Run the container:
 ```bash
-docker run -p 3000:3000 -v data:/app/data openlifter-backend-lib
+docker run -p 3000:3000 -v data:/app/data openlifter-server-app
 ```
 
 ## License
@@ -348,7 +348,7 @@ The project follows [Semantic Versioning](https://semver.org/):
 To check which version you're running:
 
 ```bash
-cargo run -p openlifter-backend-lib-bin -- --version
+cargo run -p openlifter-server-app-bin -- --version
 ```
 
 ## Performance Considerations

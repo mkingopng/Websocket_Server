@@ -18,7 +18,7 @@ check_process() {
 
 # Start the server in the background
 echo -e "${YELLOW}Starting WebSocket server...${NC}"
-cargo run -p backend-bin &
+cargo run -p server-core &
 SERVER_PID=$!
 
 # Wait for the server to start

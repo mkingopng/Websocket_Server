@@ -9,8 +9,8 @@ name = "websocket_server_tests"
 path = "lib.rs"
 
 [dependencies]
-backend-lib = { path = "../crates/backend-lib" }
-openlifter-common = { path = "../crates/common" }
+backend-lib = { path = "../crates/server-app" }
+openlifter-common = { path = "../crates/server-protocols" }
 
 tokio = { version = "1.44.2", features = ["full"] }
 axum = { version = "0.8.3", features = ["ws", "macros"] }

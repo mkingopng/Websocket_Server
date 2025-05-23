@@ -1,6 +1,6 @@
 //! Test utilities for WebSocket Server tests
 //!
-//! This module provides common test setup logic for initializing test environments
+//! This module provides server-protocols test setup logic for initializing test environments
 //! with proper session directories and configuration.
 
 use axum::extract::ws::Message;

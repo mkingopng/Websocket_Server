@@ -13,4 +13,4 @@ path = "data"
 # Rate limiting
 [rate_limit]
 window_secs = 60
-max_requests = 100
+max_requests = 100 

@@ -43,7 +43,7 @@ wait_for_server() {
 
 # Clean up any previous processes that might still be running
 echo "Cleaning up any existing processes..."
-killall -q backend-bin 2>/dev/null
+killall -q server-core 2>/dev/null
 sleep 1
 
 # Create temporary files for storing session tokens and meet IDs
@@ -52,7 +52,7 @@ MEET_ID_FILE=$(mktemp)
 
 # Start the server in the background
 echo -e "${YELLOW}Starting WebSocket server...${NC}"
-cargo run -p backend-bin > /tmp/server_log.txt 2>&1 &
+cargo run -p server-core > /tmp/server_log.txt 2>&1 &
 SERVER_PID=$!
 
 # Wait for the server to start
@@ -120,7 +120,7 @@ kill $SERVER_PID
 sleep 2
 
 echo "Restarting the server..."
-cargo run -p backend-bin > /tmp/server_log.txt 2>&1 &
+cargo run -p server-core > /tmp/server_log.txt 2>&1 &
 SERVER_PID=$!
 
 echo "Waiting for server to restart..."

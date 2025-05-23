@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/common", "crates/backend-lib", "crates/backend-bin", "tests"]
+members = ["crates/server-protocols", "crates/server-app", "crates/server-core", "tests"]
 resolver = "2"
 
 # single‑source every version/feature flag here

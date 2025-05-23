@@ -1,5 +1,5 @@
 // ============================
-// crates/backend-lib/tests/websocket_flow_tests.rs
+// crates/server-app/tests/websocket_flow_tests.rs
 // ============================
 //! Integration tests for WebSocket flows.
 
