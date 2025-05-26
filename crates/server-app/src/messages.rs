@@ -152,6 +152,64 @@ pub struct MeetInfo {
     pub clients: Vec<ClientInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Lifter {
+    pub name: String,
+    pub weight_class: String,
+    pub gender: String,
+    pub age: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Decision {
+    GoodLift,
+    NoLift,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attempt {
+    pub lifter_name: String,
+    pub lift: String,
+    pub attempt_number: u8,
+    pub weight: f32,
+    pub decision: Decision,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NextAttempt {
+    pub lifter_name: String,
+    pub lift: String,
+    pub attempt_number: u8,
+    pub weight: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetCreation {
+    pub meet_id: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetJoin {
+    pub meet_id: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateInit {
+    pub session_token: String,
+    pub updates: Vec<Attempt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetState {
+    pub status: String,
+    pub total_attempts: u32,
+    pub current_lift: String,
+    pub current_attempt: u8,
+    pub current_lifter: Option<String>,
+}
+
 // Add a test function to verify message serialization formats
 #[cfg(test)]
 mod tests {
