@@ -1,7 +1,22 @@
 // ===============================
-// meet_simulation_test.rs
+// tests/integration/meet_simulation_test.rs
 // ===============================
 //! Integration test for simulating a powerlifting meet.
+//!
+//! # Running this test
+//!
+//! To run this test and see the simulation logs, use:
+//!
+//! ```sh
+//! cargo test -p websocket-server-tests integration::meet_simulation_test -- --nocapture
+//! ```
+//!
+//! The `-- --nocapture` flag is important to display the step-by-step simulation logs.
+//!
+//! The test will also generate a CSV file with meet results at:
+//!   tests/test_data/test-meets/meet_results.csv
+//!
+//! # Test Coverage
 //!
 //! This test covers the full flow of a meet:
 //! - Meet creation
@@ -35,8 +50,10 @@ use backend_lib::{
     storage::FlatFileStorage,
 };
 use openlifter_common::Update;
+use serde::Deserialize;
 use serde_json::Value;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -81,13 +98,34 @@ struct Attempt {
     decision: Decision,
 }
 
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+enum IncomingMessage {
+    #[serde(rename = "register")]
+    Register {
+        name: String,
+        weight_class: String,
+        gender: String,
+        age: u8,
+    },
+    #[serde(rename = "weigh_in")]
+    WeighIn { lifter: String, body_weight: f32 },
+    #[serde(rename = "attempt")]
+    Attempt {
+        lifter: String,
+        lift: String,
+        attempt: u8,
+        weight: f32,
+        decision: String,
+    },
+}
+
 impl MeetSimulation {
-    /// Create a new `MeetSimulation` instance.
-    ///
-    /// # Arguments
-    /// * `_storage` - Storage backend (not used directly in this struct, but may be useful for extensions).
-    /// * `_auth_service` - Authentication service (not used directly in this struct).
-    /// * `meet_handle` - Handle to the meet actor.
+    /** Create a new `MeetSimulation` instance.
+    # Arguments
+    * `_storage` - Storage backend (not used directly in this struct, but may be useful for extensions).
+    * `_auth_service` - Authentication service (not used directly in this struct).
+    * `meet_handle` - Handle to the meet actor. */
     fn new(
         _storage: Arc<Mutex<FlatFileStorage>>,
         _auth_service: &impl AuthService,
@@ -117,6 +155,7 @@ impl MeetSimulation {
     ///
     /// # Arguments
     /// * `_storage` - Storage backend (not used directly, but could be used for persistence).
+    #[allow(dead_code)]
     async fn register_lifters(
         &mut self,
         _storage: &Arc<Mutex<FlatFileStorage>>,
@@ -247,6 +286,7 @@ impl MeetSimulation {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn record_opening_attempt(
         &mut self,
         lifter: &Lifter,
@@ -266,12 +306,15 @@ impl MeetSimulation {
         Ok(())
     }
 
-    fn export_to_csv(&self, filename: &str) -> Result<(), String> {
+    fn export_to_csv(&self) -> Result<(), String> {
+        // Always export to tests/test_data/test-meets/meet_results.csv relative to workspace root
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let filename = workspace_root.join("tests/test_data/test-meets/meet_results.csv");
         // Ensure the parent directory exists
-        if let Some(parent) = Path::new(filename).parent() {
+        if let Some(parent) = filename.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let mut file = File::create(filename).map_err(|e| e.to_string())?;
+        let mut file = File::create(&filename).map_err(|e| e.to_string())?;
 
         // Write header
         writeln!(file, "Name,Weight Class,Gender,Age,Body Weight,Squat 1,Squat 2,Squat 3,Bench 1,Bench 2,Bench 3,Deadlift 1,Deadlift 2,Deadlift 3")
@@ -300,6 +343,114 @@ impl MeetSimulation {
         }
         Ok(())
     }
+
+    #[allow(clippy::unused_self)]
+    fn log_step(&self, msg: &str) {
+        println!("[SIMULATION LOG] {msg}");
+        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let log_path = workspace_root.join("tests/test_data/test-meets/simulation.log");
+        // Create directory if it doesn't exist
+        if let Some(parent) = log_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                println!("[ERROR] Failed to create log directory: {e}");
+                return;
+            }
+        }
+        // Try to open and write to the log file
+        match OpenOptions::new().create(true).append(true).open(&log_path) {
+            Ok(mut file) => {
+                if let Err(e) = writeln!(file, "[SIMULATION LOG] {msg}") {
+                    println!("[ERROR] Failed to write to log file: {e}");
+                }
+            },
+            Err(e) => println!("[ERROR] Failed to open log file: {e}"),
+        }
+    }
+
+    async fn ingest_json(&mut self, json: &str) -> Result<(), String> {
+        self.log_step(&format!("Ingesting JSON: {json}"));
+        let msg: IncomingMessage = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        match msg {
+            IncomingMessage::Register {
+                name,
+                weight_class,
+                gender,
+                age,
+            } => {
+                self.log_step(&format!("Registering lifter: {name}"));
+                let lifter = Lifter {
+                    name: name.clone(),
+                    weight_class,
+                    gender,
+                    age,
+                };
+                let update = Update {
+                    update_key: format!("lifter.{name}"),
+                    update_value: Value::String(serde_json::to_string(&lifter).unwrap()),
+                    local_seq_num: 1,
+                    after_server_seq_num: 0,
+                };
+                self.meet_handle
+                    .apply_updates("test".to_string(), 1, vec![update])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                self.lifters.push(lifter);
+                self.log_step(&format!("[OK] Registered lifter: {name}"));
+            },
+            IncomingMessage::WeighIn {
+                lifter,
+                body_weight,
+            } => {
+                self.log_step(&format!("Weigh-in for {lifter}: {body_weight}kg"));
+                let lifter_index = self
+                    .lifters
+                    .iter()
+                    .position(|l| l.name == lifter)
+                    .ok_or("Lifter not found")?;
+                let lifter_obj = self
+                    .lifters
+                    .get(lifter_index)
+                    .cloned()
+                    .ok_or("Lifter not found")?;
+                self.record_weigh_in(&lifter_obj, body_weight).await?;
+                self.log_step(&format!(
+                    "[OK] Weigh-in recorded for {lifter}: {body_weight}kg"
+                ));
+            },
+            IncomingMessage::Attempt {
+                lifter,
+                lift,
+                attempt,
+                weight,
+                decision,
+            } => {
+                self.log_step(&format!(
+                    "Attempt: {lifter} {lift} {attempt} {weight}kg {decision}"
+                ));
+                let lifter_index = self
+                    .lifters
+                    .iter()
+                    .position(|l| l.name == lifter)
+                    .ok_or("Lifter not found")?;
+                let lifter_obj = self
+                    .lifters
+                    .get(lifter_index)
+                    .cloned()
+                    .ok_or("Lifter not found")?;
+                let decision_enum = match decision.as_str() {
+                    "GoodLift" => Decision::GoodLift,
+                    "NoLift" => Decision::NoLift,
+                    _ => return Err("Invalid decision".to_string()),
+                };
+                self.process_attempt(&lifter_obj, &lift, attempt, weight, decision_enum)
+                    .await?;
+                self.log_step(&format!(
+                    "[OK] Attempt processed: {lifter} {lift} {attempt} {weight}kg {decision}"
+                ));
+            },
+        }
+        Ok(())
+    }
 }
 
 fn format_attempt(attempt: Option<&Attempt>) -> String {
@@ -317,7 +468,6 @@ fn format_attempt(attempt: Option<&Attempt>) -> String {
 }
 
 /// Integration test: Simulate a full meet with multiple lifters and all attempts.
-///
 /// This test covers:
 /// - Meet creation
 /// - Lifter registration
@@ -336,13 +486,20 @@ async fn test_meet_simulation() {
         .await
         .expect("Failed to create meet");
 
-    // Step 2: Register lifters
-    simulation
-        .register_lifters(&storage)
-        .await
-        .expect("Failed to register lifters");
+    // Step 2: Register lifters via JSON
+    let lifters_json = vec![
+        r#"{"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}"#,
+        r#"{"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}"#,
+        r#"{"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}"#,
+    ];
+    for lifter_json in lifters_json {
+        simulation
+            .ingest_json(lifter_json)
+            .await
+            .expect("Failed to register lifter");
+    }
 
-    // Step 3: Record weigh-ins and opening attempts
+    // Step 3: Record weigh-ins and opening attempts via JSON
     for lifter in simulation.lifters.clone() {
         // Simulate weigh-in (random weight within class)
         let body_weight = match lifter.weight_class.as_str() {
@@ -351,47 +508,55 @@ async fn test_meet_simulation() {
             "105kg" => 95.0 + rand::random::<f32>() * 10.0,
             _ => 80.0 + rand::random::<f32>() * 20.0,
         };
+        let weigh_in_json = format!(
+            "{{\"type\":\"weigh_in\",\"lifter\":\"{}\",\"body_weight\":{}}}",
+            lifter.name, body_weight
+        );
         simulation
-            .record_weigh_in(&lifter, body_weight)
+            .ingest_json(&weigh_in_json)
             .await
             .expect("Failed to record weigh-in");
 
         // Record opening attempts for each lift
         for lift in &["squat", "bench", "deadlift"] {
             let opening_weight = match *lift {
+                "squat" => 120.0,
                 "bench" => 80.0,
-                "deadlift" => 120.0,
                 _ => 100.0,
             };
+            let attempt_json = format!(
+                "{{\"type\":\"attempt\",\"lifter\":\"{}\",\"lift\":\"{}\",\"attempt\":1,\"weight\":{},\"decision\":\"GoodLift\"}}",
+                lifter.name, lift, opening_weight
+            );
             simulation
-                .record_opening_attempt(&lifter, lift, opening_weight)
+                .ingest_json(&attempt_json)
                 .await
                 .expect("Failed to record opening attempt");
         }
     }
 
-    // Step 4: Simulate the meet flow sequentially
+    // Step 4: Simulate the meet flow sequentially via JSON
     for lift in &["squat", "bench", "deadlift"] {
         for attempt in 1..=3 {
             for lifter in simulation.lifters.clone() {
                 // Simulate referee decision (randomly choose good lift or no lift)
-                let decision = if rand::random() {
-                    Decision::GoodLift
-                } else {
-                    Decision::NoLift
-                };
+                let decision = if rand::random() { "GoodLift" } else { "NoLift" };
 
                 // Calculate attempt weight (increase by 5kg each attempt)
                 let base_weight = match *lift {
                     "bench" => 80.0,
-                    "deadlift" => 120.0,
+                    "deadlift" | "squat" => 120.0,
                     _ => 100.0,
                 };
-                let weight = base_weight + (f32::from(attempt - 1) * 5.0);
+                #[allow(clippy::cast_precision_loss)]
+                let weight = base_weight + ((attempt as f32 - 1.0) * 5.0);
 
-                // Process the attempt
+                let attempt_json = format!(
+                    "{{\"type\":\"attempt\",\"lifter\":\"{}\",\"lift\":\"{}\",\"attempt\":{},\"weight\":{},\"decision\":\"{}\"}}",
+                    lifter.name, lift, attempt, weight, decision
+                );
                 simulation
-                    .process_attempt(&lifter, lift, attempt, weight, decision)
+                    .ingest_json(&attempt_json)
                     .await
                     .expect("Failed to process attempt");
 
@@ -403,7 +568,7 @@ async fn test_meet_simulation() {
 
     // Step 5: Export results to CSV
     simulation
-        .export_to_csv("tests/test_data/test-meets/meet_results.csv")
+        .export_to_csv()
         .expect("Failed to export results");
 
     // Step 6: Verify final state
