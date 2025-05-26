@@ -4,44 +4,37 @@
 //! Integration test for simulating a powerlifting meet.
 //!
 //! # Running this test
-//!
 //! To run this test and see the simulation logs, use:
-//!
 //! ```sh
 //! cargo test -p websocket-server-tests integration::meet_simulation_test -- --nocapture
 //! ```
-//!
-//! The `-- --nocapture` flag is important to display the step-by-step simulation logs.
-//!
 //! The test will also generate a CSV file with meet results at:
-//!   tests/test_data/test-meets/meet_results.csv
-//!
-//! # Test Coverage
-//!
-//! This test covers the full flow of a meet:
-//! - Meet creation
-//! - Lifter registration: name, weight class, gender, age, equipment
-//! - lifter weigh-ins & opening attempts: record lifter body weight and opening attempt for each lift
-//! - Simulate squat attempt 1 sequentially for each lifter. Record result (good lift, no lift)
-//! - Submit second attempt for each lifter after they complete the first attempt
-//! - Simulate squat attempt 2 sequentially for all lifters. Record result (good lift, no lift)
-//! - Submit third attempt for each lifter after they complete the second attempt
-//! - Simulate squat attempt 3 sequentially for all lifters. Record result (good lift, no lift)
-//! - Simulate bench attempt 1 sequentially for all lifters. Record result (good lift, no lift)
-//! - Submit second bench press attempt for each lifter after they complete the first attempt
-//! - Simulate bench attempt 2 sequentially for all lifters. Record result (good lift, no lift)
-//! - Submit third bench press attempt for each lifter after they complete the first attempt
-//! - Simulate bench attempt 3 sequentially for all lifters. Record result (good lift, no lift)
-//! - Simulate deadlift attempt 1 sequentially for all lifters. Record result (good lift, no lift)
-//! - Submit second attempt for each lifter after they complete the first attempt
-//! - Simulate deadlift attempt 2 sequentially for all lifters. Record result (good lift, no lift)
-//! - Submit third attempt for each lifter after they complete the second attempt
-//! - Simulate deadlift attempt 3 sequentially for all lifters. Record result (good lift, no lift)
-//! - export the final meet results to csv
-//!
-//! The test is designed to ensure that the backend logic for meet management
-//! works as expected in a realistic scenario.
+//!   `tests/test_data/test-meets/meet_results.csv`
 
+/** # Test Coverage
+This test covers the full flow of a meet:
+- Meet creation
+- Lifter registration: name, weight class, gender, age, equipment
+- lifter weigh-ins & opening attempts: record lifter body weight and opening attempt for each lift
+- Simulate squat attempt 1 sequentially for each lifter. Record result (good lift, no lift)
+- Submit second attempt for each lifter after they complete the first attempt
+- Simulate squat attempt 2 sequentially for all lifters. Record result (good lift, no lift)
+- Submit third attempt for each lifter after they complete the second attempt
+- Simulate squat attempt 3 sequentially for all lifters. Record result (good lift, no lift)
+- Simulate bench attempt 1 sequentially for all lifters. Record result (good lift, no lift)
+- Submit second bench press attempt for each lifter after they complete the first attempt
+- Simulate bench attempt 2 sequentially for all lifters. Record result (good lift, no lift)
+- Submit third bench press attempt for each lifter after they complete the first attempt
+- Simulate bench attempt 3 sequentially for all lifters. Record result (good lift, no lift)
+- Simulate deadlift attempt 1 sequentially for all lifters. Record result (good lift, no lift)
+- Submit second attempt for each lifter after they complete the first attempt
+- Simulate deadlift attempt 2 sequentially for all lifters. Record result (good lift, no lift)
+- Submit third attempt for each lifter after they complete the second attempt
+- Simulate deadlift attempt 3 sequentially for all lifters. Record result (good lift, no lift)
+- export the final meet results to csv
+
+The test is designed to ensure that the backend logic for meet management
+works as expected in a realistic scenario. */
 use crate::test_utils::{attempt_to_update, TestMeet};
 use backend_lib::{
     auth::AuthService,
@@ -140,10 +133,9 @@ impl MeetSimulation {
         }
     }
 
-    /// Simulate meet creation by starting a new session.
-    ///
-    /// # Arguments
-    /// * `auth_service` - Reference to the authentication service.
+    /** Simulate meet creation by starting a new session.
+    # Arguments
+    * `auth_service` - Reference to the authentication service. */
     async fn create_meet(&mut self, auth_service: &impl AuthService) -> Result<(), String> {
         let _session_token = auth_service
             .new_session(self.meet_id.clone(), "Test Location".to_string(), 1)
@@ -151,10 +143,9 @@ impl MeetSimulation {
         Ok(())
     }
 
-    /// Register a set of test lifters for the meet.
-    ///
-    /// # Arguments
-    /// * `_storage` - Storage backend (not used directly, but could be used for persistence).
+    /** Register a set of test lifters for the meet.
+    # Arguments
+    * `_storage` - Storage backend (not used directly, but could be used for persistence). */
     #[allow(dead_code)]
     async fn register_lifters(
         &mut self,
@@ -216,14 +207,13 @@ impl MeetSimulation {
         Ok(())
     }
 
-    /// Simulate a single attempt for a lifter on a given lift.
-    ///
-    /// # Arguments
-    /// * `lifter` - The lifter attempting the lift.
-    /// * `lift` - The type of lift (e.g., "squat").
-    /// * `attempt` - Attempt number (1, 2, or 3).
-    /// * `weight` - Weight attempted.
-    /// * `decision` - Referee decision (`GoodLift` or `NoLift`).
+    /** Simulate a single attempt for a lifter on a given lift.
+    # Arguments
+    * `lifter` - The lifter attempting the lift.
+    * `lift` - The type of lift (e.g., "squat").
+    * `attempt` - Attempt number (1, 2, or 3).
+    * `weight` - Weight attempted.
+    * `decision` - Referee decision (`GoodLift` or `NoLift`). */
     async fn process_attempt(
         &mut self,
         lifter: &Lifter,
@@ -467,12 +457,12 @@ fn format_attempt(attempt: Option<&Attempt>) -> String {
     }
 }
 
-/// Integration test: Simulate a full meet with multiple lifters and all attempts.
-/// This test covers:
-/// - Meet creation
-/// - Lifter registration
-/// - All attempts for all lifters
-/// - Final state verification
+/** Integration test: Simulate a full meet with multiple lifters and all attempts.
+This test covers:
+- Meet creation
+- Lifter registration
+- All attempts for all lifters
+- Final state verification */
 #[tokio::test]
 async fn test_meet_simulation() {
     let test_meet = TestMeet::new().await;
