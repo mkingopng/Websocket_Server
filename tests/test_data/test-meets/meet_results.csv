@@ -1,0 +1,4 @@
+Name,Weight Class,Gender,Age,Body Weight,Squat 1,Squat 2,Squat 3,Bench 1,Bench 2,Bench 3,Deadlift 1,Deadlift 2,Deadlift 3
+John Smith,93kg,M,25,90.72,100.0kg ✗,105.0kg ✓,110.0kg ✗,80.0kg ✓,85.0kg ✓,90.0kg ✗,120.0kg ✓,125.0kg ✓,130.0kg ✗
+Jane Doe,84kg,F,28,80.19,100.0kg ✓,105.0kg ✓,110.0kg ✗,80.0kg ✗,85.0kg ✗,90.0kg ✓,120.0kg ✗,125.0kg ✗,130.0kg ✗
+Bob Johnson,105kg,M,32,103.25,100.0kg ✓,105.0kg ✓,110.0kg ✓,80.0kg ✗,85.0kg ✗,90.0kg ✓,120.0kg ✗,125.0kg ✓,130.0kg ✗

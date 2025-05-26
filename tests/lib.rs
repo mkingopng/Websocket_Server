@@ -25,6 +25,7 @@ mod unit {
 mod integration {
     // Integration tests
     mod auth_flow_tests;
+    mod meet_simulation_test;
     mod websocket_flow_tests;
 }
 
