@@ -148,26 +148,26 @@ pub enum ServerToClient {
     PublishAck,
     /// Error response for malformed messages
     MalformedMessage {
-        /// Error description
+        // Error description
         err_msg: String,
     },
-    /// Error response for unknown message types
+    // Error response for unknown message types
     UnknownMessageType {
-        /// The unknown message type
+        // The unknown message type
         msg_type: String,
     },
-    /// Error response for invalid sessions
+    // Error response for invalid sessions
     InvalidSession {
-        /// The invalid session token
+        // The invalid session token
         session_token: String,
     },
 }
 
-/// Meet information stored on the server
+// Meet information stored on the server
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MeetInfo {
-    /// Hashed meet password
+    // Hashed meet password
     pub password_hash: String,
-    /// List of endpoints with priorities
+    // List of endpoints with priorities
     pub endpoints: Vec<EndpointPriority>,
 }

@@ -93,7 +93,7 @@ fn default_port() -> u16 {
 
 #[allow(dead_code)]
 fn default_data_dir() -> PathBuf {
-    PathBuf::from("data")
+    PathBuf::from("server-storage")
 }
 
 #[allow(dead_code)]
@@ -147,7 +147,7 @@ impl Default for Settings {
                 host: "127.0.0.1".to_string(),
             },
             storage: StorageSettings {
-                path: PathBuf::from("data"),
+                path: PathBuf::from("server-storage"),
             },
             rate_limit: default_rate_limit(),
         }
@@ -192,7 +192,7 @@ mod config_tests {
             port = 8080
             
             [storage]
-            path = "custom_data"
+            path = "custom_server_stroage"
             
             [rate_limit]
             max_requests = 150
@@ -204,7 +204,7 @@ mod config_tests {
         let mut custom_config = create_test_config();
         custom_config.server.host = "custom_host".to_string();
         custom_config.server.port = 8080;
-        custom_config.storage.path = PathBuf::from("custom_data");
+        custom_config.storage.path = PathBuf::from("custom_server_storage");
         custom_config.rate_limit = RateLimitSettings {
             max_requests: 150,
             window_secs: 90,
@@ -212,7 +212,10 @@ mod config_tests {
 
         assert_eq!(custom_config.server.port, 8080);
         assert_eq!(custom_config.server.host, "custom_host");
-        assert_eq!(custom_config.storage.path, PathBuf::from("custom_data"));
+        assert_eq!(
+            custom_config.storage.path,
+            PathBuf::from("custom_server_storage")
+        );
         assert_eq!(
             custom_config.rate_limit,
             RateLimitSettings {

@@ -51,8 +51,8 @@ impl MeetHandle {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let (relay_tx, _) = broadcast::channel(100);
 
-        let storage =
-            crate::storage::FlatFileStorage::new("data").expect("Failed to initialize storage");
+        let storage = crate::storage::FlatFileStorage::new("server-storage")
+            .expect("Failed to initialize storage");
         let actor = MeetActor::new(meet_id, storage, relay_tx.clone());
 
         tokio::spawn(actor.run(cmd_rx));

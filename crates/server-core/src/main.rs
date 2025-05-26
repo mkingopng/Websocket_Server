@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     debug!("Configuration loaded: {:?}", config);
 
     // Ensure the data directory exists
-    let data_dir = "data";
+    let data_dir = "server-storage";
     fs::create_dir_all(data_dir).expect("Failed to create data directory");
     fs::create_dir_all(format!("{data_dir}/current-meets"))
         .expect("Failed to create current-meets directory");

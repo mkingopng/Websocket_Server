@@ -1,4 +1,5 @@
 #!/bin/bash
+# demo.sh
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -50,7 +51,7 @@ echo "============================================="
 
 # Create data directory structure if it doesn't exist
 echo "Ensuring data directories exist..."
-mkdir -p data/current-meets data/finished-meets data/sessions
+mkdir -p server-storage/current-meets server-storage/finished-meets server-storage/sessions
 
 # Clean up any previous processes that might still be running
 echo "Cleaning up any existing processes..."
@@ -59,7 +60,7 @@ sleep 1
 
 # Clean up any existing sessions to avoid loops
 echo "Removing existing sessions..."
-rm -rf data/sessions/*
+rm -rf server-storage/sessions/*
 
 # Start the server with RUST_LOG set for more verbose output for debugging
 echo -e "${YELLOW}Starting WebSocket server...${NC}"
@@ -118,7 +119,7 @@ echo "Creating meet with ID: $MEET_ID"
 echo "$MEET_ID" > $MEET_ID_FILE
 echo "$SESSION_TOKEN" > $SESSION1_FILE
 
-# We'll simulate the creation of a meet
+# Simulate the creation of a meet
 echo -e "${GREEN}Meet created successfully (simulated)!${NC}"
 
 # Step 2: Join the meet with a second client

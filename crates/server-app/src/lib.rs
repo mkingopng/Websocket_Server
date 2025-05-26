@@ -82,7 +82,7 @@ impl<S> AppState<S> {
     where
         S: From<FlatFileStorage>,
     {
-        let storage = S::from(FlatFileStorage::new("data")?);
+        let storage = S::from(FlatFileStorage::new("server-storage")?);
         let settings = Settings::load()?;
         Self::new(storage, &settings)
             .await

@@ -22,7 +22,7 @@ fn test_settings_default() {
     // Verify default values
     assert_eq!(settings.server.host, "127.0.0.1");
     assert_eq!(settings.server.port, 8080);
-    assert_eq!(settings.storage.path, PathBuf::from("data"));
+    assert_eq!(settings.storage.path, PathBuf::from("server-storage"));
     assert_eq!(settings.rate_limit.max_requests, 100);
     assert_eq!(settings.rate_limit.window_secs, 60);
 }
@@ -127,7 +127,7 @@ fn test_default_data_dir() {
     // Test that the default data dir function returns the expected value
     // This is an indirect test since we can't call the private function directly
     let settings = Settings::default();
-    assert_eq!(settings.storage.path, PathBuf::from("data"));
+    assert_eq!(settings.storage.path, PathBuf::from("server-storage"));
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn test_load_settings_from_environment() {
             port: 1234,
         },
         storage: StorageSettings {
-            path: PathBuf::from("default_path"),
+            path: PathBuf::from("server-storage"),
         },
         rate_limit: RateLimitSettings {
             window_secs: 5,
@@ -186,6 +186,7 @@ fn test_load_settings_from_environment() {
     // Verify that our settings structure works as expected
     assert_eq!(settings.server.host, "env.override");
     assert_eq!(settings.server.port, 1234);
+    assert_eq!(settings.storage.path, PathBuf::from("server-storage"));
 }
 
 // These tests are based on the original tests but updated to match the current API
@@ -202,7 +203,7 @@ fn test_settings_with_custom_values() {
             port: 3000,
         },
         storage: StorageSettings {
-            path: PathBuf::from("data"),
+            path: PathBuf::from("server-storage"),
         },
         rate_limit: RateLimitSettings {
             window_secs: 60,
@@ -213,7 +214,7 @@ fn test_settings_with_custom_values() {
     // Verify the settings
     assert_eq!(settings.server.host, "127.0.0.1");
     assert_eq!(settings.server.port, 3000);
-    assert_eq!(settings.storage.path, PathBuf::from("data"));
+    assert_eq!(settings.storage.path, PathBuf::from("server-storage"));
     assert_eq!(settings.rate_limit.window_secs, 60);
     assert_eq!(settings.rate_limit.max_requests, 100);
 }
@@ -250,7 +251,7 @@ fn test_environment_overrides() {
         port = 3000
         
         [storage]
-        path = "test_data"
+        path = "server-storage"
         
         [rate_limit]
         window_secs = 60
@@ -267,7 +268,7 @@ fn test_environment_overrides() {
             port: 3000,
         },
         storage: StorageSettings {
-            path: PathBuf::from("test_data"),
+            path: PathBuf::from("server-storage"),
         },
         rate_limit: RateLimitSettings {
             window_secs: 60,
@@ -278,7 +279,7 @@ fn test_environment_overrides() {
     // Verify the settings
     assert_eq!(settings.server.host, "127.0.0.1");
     assert_eq!(settings.server.port, 3000);
-    assert_eq!(settings.storage.path, PathBuf::from("test_data"));
+    assert_eq!(settings.storage.path, PathBuf::from("server-storage"));
     assert_eq!(settings.rate_limit.window_secs, 60);
     assert_eq!(settings.rate_limit.max_requests, 100);
 }
