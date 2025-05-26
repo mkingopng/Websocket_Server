@@ -150,3 +150,42 @@ impl AuthRateLimiter {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn test_rate_limiter_behavior() {
+        let rate_limiter = AuthRateLimiter::default();
+        let ip1 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let ip2 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
+        let ip3 = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1));
+        let ip4 = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 2));
+
+        // Test initial attempts are allowed
+        assert!(rate_limiter.check_rate_limit(ip1));
+
+        // Test blocking after max attempts
+        for _ in 0..5 {
+            rate_limiter.record_failed_attempt(ip2);
+        }
+        assert!(!rate_limiter.check_rate_limit(ip2));
+
+        // Test reset after success
+        for _ in 0..3 {
+            rate_limiter.record_failed_attempt(ip3);
+        }
+        assert!(rate_limiter.check_rate_limit(ip3));
+        rate_limiter.record_success(ip3);
+        assert!(rate_limiter.check_rate_limit(ip3));
+
+        // Test different IPs tracked separately
+        for _ in 0..5 {
+            rate_limiter.record_failed_attempt(ip3);
+        }
+        assert!(!rate_limiter.check_rate_limit(ip3));
+        assert!(rate_limiter.check_rate_limit(ip4));
+    }
+}

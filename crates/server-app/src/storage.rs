@@ -124,6 +124,26 @@ impl FlatFileStorage {
         fs::create_dir_all(root.join("finished-meets"))?;
         Ok(Self { root })
     }
+
+    /// Helper to get meet directory path
+    fn meet_path(&self, meet_id: &str) -> PathBuf {
+        self.root.join("current-meets").join(meet_id)
+    }
+
+    /// Helper to create meet directory if needed
+    async fn ensure_meet_dir(&self, meet_id: &str) -> Result<(), AppError> {
+        tokio_fs::create_dir_all(self.meet_path(meet_id)).await?;
+        Ok(())
+    }
+
+    /// Helper to write file content atomically
+    async fn write_file(&self, path: &Path, content: &str) -> Result<(), AppError> {
+        if let Some(parent) = path.parent() {
+            tokio_fs::create_dir_all(parent).await?;
+        }
+        tokio_fs::write(path, content).await?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -132,27 +152,14 @@ impl Storage for FlatFileStorage {
     /// The file is created if it doesn't exist, and the update is appended
     /// atomically using a temporary file.
     async fn append_update(&self, meet_id: &str, json_line: &str) -> Result<(), AppError> {
-        let path = self
-            .root
-            .join("current-meets")
-            .join(meet_id)
-            .join("updates.log");
-
-        // ensure directory exists
-        if let Some(parent) = path.parent() {
-            tokio_fs::create_dir_all(parent).await?;
-        } else {
-            return Err(AppError::Internal(
-                "Invalid path: no parent directory".to_string(),
-            ));
-        }
+        self.ensure_meet_dir(meet_id).await?;
+        let path = self.meet_path(meet_id).join("updates.log");
 
         let mut file = tokio_fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
-            .await
-            .map_err(AppError::from)?;
+            .await?;
 
         file.write_all(json_line.as_bytes()).await?;
         file.write_all(b"\n").await?;
@@ -162,11 +169,7 @@ impl Storage for FlatFileStorage {
     /// Read all updates for a meet
     /// Returns an empty vector if the meet doesn't exist or has no updates.
     async fn read_updates(&self, meet_id: &str) -> Result<Vec<String>, AppError> {
-        let path = self
-            .root
-            .join("current-meets")
-            .join(meet_id)
-            .join("updates.log");
+        let path = self.meet_path(meet_id).join("updates.log");
 
         if !path.exists() {
             return Ok(Vec::new());
@@ -186,7 +189,7 @@ impl Storage for FlatFileStorage {
     /// The operation is atomic - it either succeeds completely or fails
     /// without modifying the filesystem.
     async fn archive_meet(&self, meet_id: &str) -> Result<(), AppError> {
-        let src = self.root.join("current-meets").join(meet_id);
+        let src = self.meet_path(meet_id);
         let dst = self.root.join("finished-meets").join(meet_id);
 
         if src.exists() {
@@ -205,42 +208,22 @@ impl Storage for FlatFileStorage {
         password_hash: &str,
         endpoints: &[EndpointPriority],
     ) -> Result<(), AppError> {
-        let path = self
-            .root
-            .join("current-meets")
-            .join(meet_id)
-            .join("meet-info.json");
-
-        // ensure directory exists
-        tokio_fs::create_dir_all(path.parent().unwrap()).await?;
-
         let meet_info = MeetInfo {
             password_hash: password_hash.to_string(),
             endpoints: endpoints.to_vec(),
         };
 
+        let path = self.meet_path(meet_id).join("meet-info.json");
         let json = serde_json::to_string_pretty(&meet_info)?;
-        tokio_fs::write(path, json).await?;
-
-        Ok(())
+        self.write_file(&path, &json).await
     }
 
     /// Get meet information from meet-info.json
     /// Returns an error if the meet doesn't exist or the file is corrupted.
     async fn get_meet_info(&self, meet_id: &str) -> Result<MeetInfo, AppError> {
-        let path = self
-            .root
-            .join("current-meets")
-            .join(meet_id)
-            .join("meet-info.json");
-
-        if !path.exists() {
-            return Err(AppError::MeetNotFound);
-        }
-
+        let path = self.meet_path(meet_id).join("meet-info.json");
         let content = tokio_fs::read_to_string(&path).await?;
         let meet_info: MeetInfo = serde_json::from_str(&content)?;
-
         Ok(meet_info)
     }
 
@@ -253,26 +236,13 @@ impl Storage for FlatFileStorage {
         opl_csv: &str,
         return_email: &str,
     ) -> Result<(), AppError> {
-        let path = self
-            .root
-            .join("current-meets")
-            .join(meet_id)
-            .join("meet.csv");
+        self.ensure_meet_dir(meet_id).await?;
+        let meet_dir = self.meet_path(meet_id);
 
-        // ensure directory exists
-        tokio_fs::create_dir_all(path.parent().unwrap()).await?;
-
-        tokio_fs::write(path, opl_csv).await?;
-
-        // Store return email
-        let email_path = self
-            .root
-            .join("current-meets")
-            .join(meet_id)
-            .join("return-email.txt");
-
-        tokio_fs::write(email_path, return_email).await?;
-
+        // Write CSV and email files
+        self.write_file(&meet_dir.join("meet.csv"), opl_csv).await?;
+        self.write_file(&meet_dir.join("return-email.txt"), return_email)
+            .await?;
         Ok(())
     }
 }

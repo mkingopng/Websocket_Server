@@ -19,19 +19,6 @@ use tokio::sync::mpsc;
 use tokio::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 
-/// Helper to set up a test environment
-#[allow(dead_code)]
-async fn setup_test_env() -> (
-    Arc<AppState<backend_lib::storage::FlatFileStorage>>,
-    TempDir,
-) {
-    let temp_dir = TempDir::new().unwrap();
-    let storage = backend_lib::storage::FlatFileStorage::new(temp_dir.path()).unwrap();
-    let settings = Settings::default();
-    let state = Arc::new(AppState::new(storage.clone(), &settings).await.unwrap());
-    (state, temp_dir)
-}
-
 /// Helper to set up a test environment for `WebSocketHandler`
 async fn setup() -> (
     WebSocketHandler<backend_lib::storage::FlatFileStorage>,

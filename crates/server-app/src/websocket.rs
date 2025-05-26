@@ -1,30 +1,11 @@
 // ==================
 // crates/server-app/src/websocket.rs
 // ==================
-/** WebSocket Handler Module
-This module implements the WebSocket handler for the `OpenLifter` backend server.
-It provides functionality for handling WebSocket connections and messages.
+//! WebSocket handler for OpenLifter backend server.
+//!
+//! Provides connection management, message routing, session validation,
+//! and conflict resolution for powerlifting meet coordination.
 
-Features:
-- Connection state management
-- Message routing
-- Session validation
-- Subscription handling
-- Automatic reconnection
-- Rate limiting
-- Conflict resolution
-- Data persistence
-
-The WebSocket handler follows a message-based architecture where clients
-send messages to the server, and the server broadcasts updates to all
-connected clients.
-
-Messages are typed using the `ClientMessage` and `ServerMessage` enums, which
-define the protocol between the client and server.
-
-When multiple clients update the same "location" (data entity), the handler
-resolves conflicts based on client priority levels, with higher priority updates
-taking precedence.*/
 use crate::{
     messages::{ClientMessage, ServerMessage, Update, UpdateWithMetadata},
     storage::Storage,
@@ -42,6 +23,60 @@ const MAX_RECONNECT_ATTEMPTS: u8 = 5;
 
 /// Base delay between reconnection attempts in milliseconds
 const RECONNECT_DELAY_MS: u64 = 1000; // 1 second
+
+/// Macro to simplify validation error handling
+macro_rules! validate_or_error {
+    ($validation:expr, $error_code:expr) => {
+        match $validation {
+            Ok(val) => val,
+            Err(e) => {
+                return Ok(ServerMessage::Error {
+                    code: $error_code.to_string(),
+                    message: e.to_string(),
+                });
+            },
+        }
+    };
+}
+
+/// Macro to handle auth rate limiting
+macro_rules! check_auth_rate_limit {
+    ($self:expr) => {
+        if let Some(ip) = $self.client_ip {
+            if let Some(auth) = $self
+                .state
+                .auth
+                .as_any()
+                .downcast_ref::<crate::auth::DefaultAuth>()
+            {
+                if auth.check_auth_rate_limit(ip).is_err() {
+                    return Ok(ServerMessage::Error {
+                        code: "AUTH_RATE_LIMITED".to_string(),
+                        message: "Too many authentication attempts. Please try again later."
+                            .to_string(),
+                    });
+                }
+                auth.record_success(ip);
+            }
+        }
+    };
+}
+
+/// Macro to record failed auth attempts
+macro_rules! record_auth_failure {
+    ($self:expr) => {
+        if let Some(ip) = $self.client_ip {
+            if let Some(auth) = $self
+                .state
+                .auth
+                .as_any()
+                .downcast_ref::<crate::auth::DefaultAuth>()
+            {
+                auth.record_failed_attempt(ip);
+            }
+        }
+    };
+}
 
 /// WebSocket handler for processing messages
 pub struct WebSocketHandler<S> {
@@ -109,103 +144,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 );
             }
         }
-    }
-
-    // Try to send a message to a client with retry logic
-    #[allow(dead_code)]
-    async fn try_send_with_retry(
-        &self,
-        client: &mpsc::Sender<ServerMessage>,
-        message: ServerMessage,
-    ) -> Result<()> {
-        let mut attempts = 0;
-        let max_attempts = 3;
-        let mut delay = RECONNECT_DELAY_MS;
-
-        while attempts < max_attempts {
-            match client.send(message.clone()).await {
-                Ok(()) => return Ok(()),
-                Err(e) => {
-                    attempts += 1;
-                    if attempts >= max_attempts {
-                        return Err(anyhow!(
-                            "Failed to send message after {} attempts: {}",
-                            max_attempts,
-                            e
-                        ));
-                    }
-
-                    // Log the error
-                    error!("Error sending message, attempt {attempts}/{max_attempts}: {e}");
-
-                    // Wait before retrying with exponential backoff
-                    time::sleep(Duration::from_millis(delay)).await;
-                    delay *= 2;
-                },
-            }
-        }
-
-        Err(anyhow!(
-            "Failed to send message after {} attempts",
-            max_attempts
-        ))
-    }
-
-    // Broadcast updates to all connected clients for a meet
-    #[allow(dead_code)]
-    async fn broadcast_update(&self, meet_id: &str, updates: Vec<Update>) -> Result<()> {
-        // Check if we have clients for this meet
-        let clients = match self.state.clients.get(meet_id) {
-            Some(clients) if !clients.is_empty() => clients,
-            _ => return Ok(()), // No clients to broadcast to
-        };
-
-        // Create metadata for each update
-        let updates_with_metadata: Vec<UpdateWithMetadata> = updates
-            .into_iter()
-            .enumerate()
-            .map(|(idx, update)| UpdateWithMetadata {
-                update,
-                source_client: self.client_id.clone(),
-                server_seq: idx as u64,
-                priority: self.client_priority,
-            })
-            .collect();
-
-        // Create the relay message
-        let relay_msg = ServerMessage::UpdateRelay {
-            meet_id: meet_id.to_string(),
-            updates: updates_with_metadata,
-        };
-
-        // Use a JoinSet to send to all clients concurrently for better performance
-        let mut send_tasks = tokio::task::JoinSet::new();
-        let self_tx = self.client_tx.as_ref();
-
-        for client in clients.iter() {
-            // Skip sending to ourselves
-            if self_tx.is_none_or(|tx| !std::ptr::eq(tx, client)) {
-                let client_clone = client.clone();
-                let relay_msg_clone = relay_msg.clone();
-
-                // Add a task for each client
-                send_tasks.spawn(async move {
-                    client_clone
-                        .send(relay_msg_clone)
-                        .await
-                        .map_err(|e| anyhow!("Failed to send to client: {}", e))
-                });
-            }
-        }
-
-        // Wait for all sends to complete
-        while let Some(result) = send_tasks.join_next().await {
-            if let Err(e) = result {
-                error!("Task error during broadcast: {}", e);
-            }
-        }
-
-        Ok(())
     }
 
     // Apply conflict resolution to updates - this would be much more sophisticated in a real system
@@ -365,6 +303,54 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         })
     }
 
+    /// Helper function to handle session validation with automatic reconnection
+    async fn validate_session_or_reconnect(
+        &mut self,
+        meet_id: &str,
+        session_token: &str,
+        retry_msg: ClientMessage,
+    ) -> Result<bool, ServerMessage> {
+        if !self.state.auth.validate_session(session_token).await {
+            record_auth_failure!(self);
+            match self.try_reconnect(meet_id, session_token).await {
+                Ok(reconnected) => {
+                    if reconnected {
+                        // Successfully reconnected - retry the operation
+                        match Box::pin(self.handle_message(retry_msg)).await {
+                            Ok(response) => Err(response),
+                            Err(_) => Err(ServerMessage::InvalidSession {
+                                session_token: session_token.to_string(),
+                            }),
+                        }
+                    } else {
+                        Err(ServerMessage::InvalidSession {
+                            session_token: session_token.to_string(),
+                        })
+                    }
+                },
+                Err(_) => Err(ServerMessage::InvalidSession {
+                    session_token: session_token.to_string(),
+                }),
+            }
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Helper function to get or create meet handle
+    async fn get_or_create_meet_handle(&self, meet_id: &str) -> crate::meet_actor::MeetHandle {
+        if let Some(handle) = self.state.meet_handles.get(meet_id) {
+            handle.clone()
+        } else {
+            let storage = self.state.storage.clone();
+            let handle = crate::meet_actor::spawn_meet_actor(meet_id, storage).await;
+            self.state
+                .meet_handles
+                .insert(meet_id.to_string(), handle.clone());
+            handle
+        }
+    }
+
     /// # Handle incoming client messages
     /// This is the main entry point for processing incoming WebSocket messages from clients.
     /// It routes different message types to appropriate handlers and implements automatic
@@ -431,15 +417,10 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 );
 
                 // Validate inputs
-                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_MEET_ID".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let meet_id = validate_or_error!(
+                    crate::validation::validate_meet_id(&meet_id),
+                    "INVALID_MEET_ID"
+                );
 
                 // Check meet ID uniqueness
                 if !crate::validation::is_meet_id_unique(meet_id) {
@@ -450,50 +431,20 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 }
 
                 // Validate password
-                match crate::validation::validate_password(&password) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_PASSWORD".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                }
+                validate_or_error!(
+                    crate::validation::validate_password(&password),
+                    "INVALID_PASSWORD"
+                );
 
                 // Validate location name
-                let location_name = match crate::validation::validate_location_name(&location_name)
-                {
-                    Ok(name) => name.to_string(),
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_LOCATION".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let location_name = validate_or_error!(
+                    crate::validation::validate_location_name(&location_name),
+                    "INVALID_LOCATION"
+                )
+                .to_string();
 
                 // Check auth rate limit
-                if let Some(ip) = self.client_ip {
-                    if let Some(auth) = self
-                        .state
-                        .auth
-                        .as_any()
-                        .downcast_ref::<crate::auth::DefaultAuth>()
-                    {
-                        if auth.check_auth_rate_limit(ip).is_err() {
-                            println!("Auth rate limit exceeded for IP {ip}");
-                            return Ok(ServerMessage::Error {
-                                code: "AUTH_RATE_LIMITED".to_string(),
-                                message:
-                                    "Too many authentication attempts. Please try again later."
-                                        .to_string(),
-                            });
-                        }
-
-                        // Record success
-                        auth.record_success(ip);
-                    }
-                }
+                check_auth_rate_limit!(self);
 
                 // Register the meet ID as used
                 crate::validation::register_meet_id(meet_id);
@@ -527,61 +478,26 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 );
 
                 // Validate inputs
-                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_MEET_ID".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let meet_id = validate_or_error!(
+                    crate::validation::validate_meet_id(&meet_id),
+                    "INVALID_MEET_ID"
+                );
 
                 // Validate password
-                match crate::validation::validate_password(&password) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_PASSWORD".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                }
+                validate_or_error!(
+                    crate::validation::validate_password(&password),
+                    "INVALID_PASSWORD"
+                );
 
                 // Validate location name
-                let location_name = match crate::validation::validate_location_name(&location_name)
-                {
-                    Ok(name) => name.to_string(),
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_LOCATION".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let location_name = validate_or_error!(
+                    crate::validation::validate_location_name(&location_name),
+                    "INVALID_LOCATION"
+                )
+                .to_string();
 
                 // Check auth rate limit
-                if let Some(ip) = self.client_ip {
-                    if let Some(auth) = self
-                        .state
-                        .auth
-                        .as_any()
-                        .downcast_ref::<crate::auth::DefaultAuth>()
-                    {
-                        if auth.check_auth_rate_limit(ip).is_err() {
-                            println!("Auth rate limit exceeded for IP {ip}");
-                            return Ok(ServerMessage::Error {
-                                code: "AUTH_RATE_LIMITED".to_string(),
-                                message:
-                                    "Too many authentication attempts. Please try again later."
-                                        .to_string(),
-                            });
-                        }
-
-                        // Record success
-                        auth.record_success(ip);
-                    }
-                }
+                check_auth_rate_limit!(self);
 
                 // Set client priority
                 self.set_priority(priority);
@@ -614,65 +530,33 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 );
 
                 // Validate meet ID
-                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
-                    Ok(id) => id.to_string(),
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_MEET_ID".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let meet_id = validate_or_error!(
+                    crate::validation::validate_meet_id(&meet_id),
+                    "INVALID_MEET_ID"
+                )
+                .to_string();
 
                 // First check if session is valid to catch InvalidSession before validation errors
-                if !self.state.auth.validate_session(&session_token).await {
-                    // If failed login, record it
-                    if let Some(ip) = self.client_ip {
-                        if let Some(auth) = self
-                            .state
-                            .auth
-                            .as_any()
-                            .downcast_ref::<crate::auth::DefaultAuth>()
-                        {
-                            auth.record_failed_attempt(ip);
-                        }
-                    }
-
-                    // Session is invalid, try to reconnect
-                    match self.try_reconnect(&meet_id, &session_token).await {
-                        Ok(reconnected) => {
-                            if reconnected {
-                                // Successfully reconnected - try the update again
-                                // Use Box::pin to avoid infinite recursion
-                                let result =
-                                    Box::pin(self.handle_message(ClientMessage::UpdateInit {
-                                        meet_id,
-                                        session_token,
-                                        updates,
-                                    }))
-                                    .await;
-                                return result;
-                            }
-                            // Failed to reconnect
-                            return Ok(ServerMessage::InvalidSession { session_token });
+                if let Err(response) = self
+                    .validate_session_or_reconnect(
+                        &meet_id,
+                        &session_token,
+                        ClientMessage::UpdateInit {
+                            meet_id: meet_id.clone(),
+                            session_token: session_token.clone(),
+                            updates: updates.clone(),
                         },
-                        Err(_) => {
-                            // Return error if session is invalid
-                            return Ok(ServerMessage::InvalidSession { session_token });
-                        },
-                    }
+                    )
+                    .await
+                {
+                    return Ok(response);
                 }
 
                 // Validate session token
-                match crate::validation::validate_session_token(&session_token) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_SESSION_TOKEN".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                }
+                validate_or_error!(
+                    crate::validation::validate_session_token(&session_token),
+                    "INVALID_SESSION_TOKEN"
+                );
 
                 // Validate each update
                 let mut valid_updates = Vec::new();
@@ -715,17 +599,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     self.set_priority(session.priority);
 
                     // Get handle to the meet actor using if let instead of unwrap
-                    let meet_handle = if let Some(handle) = self.state.meet_handles.get(&meet_id) {
-                        handle.clone()
-                    } else {
-                        // Create a new meet actor if one doesn't exist
-                        let storage = self.state.storage.clone();
-                        let handle = crate::meet_actor::spawn_meet_actor(&meet_id, storage).await;
-                        self.state
-                            .meet_handles
-                            .insert(meet_id.clone(), handle.clone());
-                        handle
-                    };
+                    let meet_handle = self.get_or_create_meet_handle(&meet_id).await;
 
                     // Create openlifter_common::Update from our messages::Update
                     let ol_updates = valid_updates
@@ -819,124 +693,92 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 );
 
                 // Validate meet ID
-                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
-                    Ok(id) => id.to_string(),
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_MEET_ID".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let meet_id = validate_or_error!(
+                    crate::validation::validate_meet_id(&meet_id),
+                    "INVALID_MEET_ID"
+                )
+                .to_string();
 
                 // Validate session token
-                match crate::validation::validate_session_token(&session_token) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_SESSION_TOKEN".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
+                validate_or_error!(
+                    crate::validation::validate_session_token(&session_token),
+                    "INVALID_SESSION_TOKEN"
+                );
+
+                // Check session validity with automatic reconnection
+                if let Err(response) = self
+                    .validate_session_or_reconnect(
+                        &meet_id,
+                        &session_token,
+                        ClientMessage::ClientPull {
+                            meet_id: meet_id.clone(),
+                            session_token: session_token.clone(),
+                            last_server_seq,
+                        },
+                    )
+                    .await
+                {
+                    return Ok(response);
                 }
 
-                if self.state.auth.validate_session(&session_token).await {
-                    // Get session to retrieve priority
-                    if let Some(_session) = self.state.auth.get_session(&session_token).await {
-                        // Get handle to the meet actor
-                        let updates = if let Some(handle) = self.state.meet_handles.get(&meet_id) {
-                            // Get updates since last_server_seq
-                            match handle.get_updates_since(last_server_seq).await {
-                                Ok(updates) => {
-                                    // Convert UpdateWithServerSeq to UpdateWithMetadata
-                                    let updates_with_metadata: Vec<UpdateWithMetadata> = updates
-                                        .iter()
-                                        .map(|u| {
-                                            let update = Update {
-                                                location: u.update.update_key.clone(),
-                                                value: u.update.update_value.to_string(),
-                                                #[allow(
-                                                    clippy::cast_possible_wrap,
-                                                    clippy::cast_sign_loss
-                                                )]
-                                                timestamp: u.update.local_seq_num as i64,
-                                            };
-                                            UpdateWithMetadata {
-                                                update,
-                                                source_client: u.source_client_id.clone(),
-                                                server_seq: u.server_seq_num,
-                                                priority: u.source_client_priority,
-                                            }
-                                        })
-                                        .collect();
-                                    updates_with_metadata
-                                },
-                                Err(e) => {
-                                    return Ok(ServerMessage::Error {
-                                        code: "PULL_ERROR".to_string(),
-                                        message: e.to_string(),
-                                    });
-                                },
-                            }
-                        } else {
-                            // Meet does not exist yet (no updates)
-                            Vec::new()
-                        };
-
-                        // Register client for this meet if not already
-                        if let Some(tx) = &self.client_tx {
-                            let _ = self.register_client(&meet_id, tx.clone());
+                if let Some(_session) = self.state.auth.get_session(&session_token).await {
+                    // Get handle to the meet actor
+                    let updates = if let Some(handle) = self.state.meet_handles.get(&meet_id) {
+                        // Get updates since last_server_seq
+                        match handle.get_updates_since(last_server_seq).await {
+                            Ok(updates) => {
+                                // Convert UpdateWithServerSeq to UpdateWithMetadata
+                                let updates_with_metadata: Vec<UpdateWithMetadata> = updates
+                                    .iter()
+                                    .map(|u| {
+                                        let update = Update {
+                                            location: u.update.update_key.clone(),
+                                            value: u.update.update_value.to_string(),
+                                            #[allow(
+                                                clippy::cast_possible_wrap,
+                                                clippy::cast_sign_loss
+                                            )]
+                                            timestamp: u.update.local_seq_num as i64,
+                                        };
+                                        UpdateWithMetadata {
+                                            update,
+                                            source_client: u.source_client_id.clone(),
+                                            server_seq: u.server_seq_num,
+                                            priority: u.source_client_priority,
+                                        }
+                                    })
+                                    .collect();
+                                updates_with_metadata
+                            },
+                            Err(e) => {
+                                return Ok(ServerMessage::Error {
+                                    code: "PULL_ERROR".to_string(),
+                                    message: e.to_string(),
+                                });
+                            },
                         }
-
-                        // Return updates
-                        Ok(ServerMessage::ServerPull {
-                            meet_id,
-                            last_server_seq,
-                            updates_relayed: updates,
-                        })
                     } else {
-                        // Session not found but token was valid (should not happen)
-                        Ok(ServerMessage::Error {
-                            code: "SESSION_ERROR".to_string(),
-                            message: "Session token is valid but session not found".to_string(),
-                        })
-                    }
-                } else {
-                    // If failed login, record it
-                    if let Some(ip) = self.client_ip {
-                        if let Some(auth) = self
-                            .state
-                            .auth
-                            .as_any()
-                            .downcast_ref::<crate::auth::DefaultAuth>()
-                        {
-                            auth.record_failed_attempt(ip);
-                        }
+                        // Meet does not exist yet (no updates)
+                        Vec::new()
+                    };
+
+                    // Register client for this meet if not already
+                    if let Some(tx) = &self.client_tx {
+                        let _ = self.register_client(&meet_id, tx.clone());
                     }
 
-                    // Session may have expired - attempt to reconnect
-                    match self.try_reconnect(&meet_id, &session_token).await {
-                        Ok(reconnected) => {
-                            if reconnected {
-                                // Successfully reconnected - try the pull again
-                                // Use Box::pin to avoid infinite recursion
-                                let result =
-                                    Box::pin(self.handle_message(ClientMessage::ClientPull {
-                                        meet_id,
-                                        session_token,
-                                        last_server_seq,
-                                    }))
-                                    .await;
-                                return result;
-                            }
-                            // Failed to reconnect
-                            Ok(ServerMessage::InvalidSession { session_token })
-                        },
-                        Err(_) => {
-                            // Return error if session is invalid
-                            Ok(ServerMessage::InvalidSession { session_token })
-                        },
-                    }
+                    // Return updates
+                    Ok(ServerMessage::ServerPull {
+                        meet_id,
+                        last_server_seq,
+                        updates_relayed: updates,
+                    })
+                } else {
+                    // Session not found but token was valid (should not happen)
+                    Ok(ServerMessage::Error {
+                        code: "SESSION_ERROR".to_string(),
+                        message: "Session token is valid but session not found".to_string(),
+                    })
                 }
             },
             ClientMessage::PublishMeet {
@@ -948,37 +790,23 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 info!("Publishing meet: {}", meet_id);
 
                 // Validate meet ID
-                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
-                    Ok(id) => id.to_string(),
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_MEET_ID".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let meet_id = validate_or_error!(
+                    crate::validation::validate_meet_id(&meet_id),
+                    "INVALID_MEET_ID"
+                )
+                .to_string();
 
                 // Validate session token
-                match crate::validation::validate_session_token(&session_token) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_SESSION_TOKEN".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                }
+                validate_or_error!(
+                    crate::validation::validate_session_token(&session_token),
+                    "INVALID_SESSION_TOKEN"
+                );
 
                 // Validate email
-                match crate::validation::validate_email(&return_email) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_EMAIL".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                }
+                validate_or_error!(
+                    crate::validation::validate_email(&return_email),
+                    "INVALID_EMAIL"
+                );
 
                 // Sanitize the CSV content
                 let sanitized_csv = crate::validation::sanitize_string(&opl_csv);
@@ -1010,26 +838,17 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 info!("State recovery response for meet: {}", meet_id);
 
                 // Validate meet ID
-                let meet_id = match crate::validation::validate_meet_id(&meet_id) {
-                    Ok(id) => id.to_string(),
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_MEET_ID".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                };
+                let meet_id = validate_or_error!(
+                    crate::validation::validate_meet_id(&meet_id),
+                    "INVALID_MEET_ID"
+                )
+                .to_string();
 
                 // Validate session token
-                match crate::validation::validate_session_token(&session_token) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Ok(ServerMessage::Error {
-                            code: "INVALID_SESSION_TOKEN".to_string(),
-                            message: e.to_string(),
-                        });
-                    },
-                }
+                validate_or_error!(
+                    crate::validation::validate_session_token(&session_token),
+                    "INVALID_SESSION_TOKEN"
+                );
 
                 // Validate updates (similar to UpdateInit)
                 let mut valid_updates = Vec::new();
@@ -1067,9 +886,20 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
 mod tests {
     use super::*;
     use crate::storage::FlatFileStorage;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        routing::get,
+        Router,
+    };
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::sync::mpsc;
+    use tower::ServiceExt;
+
+    async fn test_handler() -> &'static str {
+        "Hello, World!"
+    }
 
     async fn setup() -> (
         WebSocketHandler<FlatFileStorage>,
@@ -1079,56 +909,91 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
 
-        // Create settings with the temp directory path
         let mut settings = crate::config::Settings::default();
         settings.storage.path = temp_dir.path().to_path_buf();
 
-        // Ensure the sessions directory exists
         let sessions_dir = temp_dir.path().join("sessions");
         std::fs::create_dir_all(&sessions_dir).expect("Failed to create sessions directory");
 
-        // Create app state with proper error handling
-        let state = Arc::new(
-            AppState::new(storage.clone(), &settings)
-                .await
-                .expect("Failed to create AppState for test"),
-        );
+        let state = AppState::new(storage.clone(), &settings)
+            .await
+            .expect("Failed to create AppState for test");
 
-        // Create handler
+        let state = Arc::new(state);
         let handler = WebSocketHandler::new(state.clone());
 
         (handler, state, temp_dir)
     }
 
     #[tokio::test]
+    async fn test_basic_router() {
+        let (_handler, state, _temp_dir) = setup().await;
+
+        let app = Router::new()
+            .route("/", get(test_handler))
+            .with_state(state);
+
+        let response = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn test_register_client() {
         let (mut handler, state, _temp_dir) = setup().await;
-        let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
-        let meet_id = "test-meet";
 
-        // Register client
-        let _ = handler.register_client(meet_id, tx.clone());
+        let (tx1, _rx1) = mpsc::channel::<ServerMessage>(10);
+        let (tx2, _rx2) = mpsc::channel::<ServerMessage>(10);
+        let meet_id1 = "test-meet-1";
+        let meet_id2 = "test-meet-2";
 
-        // Verify client is in the meet clients map
-        assert!(state.clients.contains_key(meet_id));
-        assert_eq!(state.clients.get(meet_id).unwrap().len(), 1);
+        let _ = handler.register_client(meet_id1, tx1);
+        let _ = handler.register_client(meet_id2, tx2);
+
+        assert!(state.clients.contains_key(meet_id1));
+        assert!(state.clients.contains_key(meet_id2));
+        assert_eq!(state.clients.get(meet_id1).unwrap().len(), 1);
+        assert_eq!(state.clients.get(meet_id2).unwrap().len(), 1);
     }
 
     #[tokio::test]
     async fn test_unregister_client() {
         let (mut handler, state, _temp_dir) = setup().await;
+
         let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
-        let meet_id = "test-meet";
+        let meet_id = "test-meet-unreg";
 
-        // Register client first
         let _ = handler.register_client(meet_id, tx);
-
-        // Verify client is registered
         assert!(state.clients.contains_key(meet_id));
         assert!(!state.clients.get(meet_id).unwrap().is_empty());
 
-        // Call unregister (we're just verifying it doesn't crash)
         handler.unregister_client(meet_id);
+        assert!(state.clients.contains_key(meet_id));
+    }
+
+    #[tokio::test]
+    async fn test_multiple_clients_for_one_meet() {
+        let (mut handler, state, _temp_dir) = setup().await;
+
+        let (tx1, _rx1) = mpsc::channel::<ServerMessage>(10);
+        let (tx2, _rx2) = mpsc::channel::<ServerMessage>(10);
+        let (tx3, _rx3) = mpsc::channel::<ServerMessage>(10);
+
+        let meet_id = "multi-client-meet";
+        let _ = handler.register_client(meet_id, tx1);
+
+        let mut handler2 = WebSocketHandler::new(state.clone());
+        let _ = handler2.register_client(meet_id, tx2);
+
+        let mut handler3 = WebSocketHandler::new(state.clone());
+        let _ = handler3.register_client(meet_id, tx3);
+
+        assert_eq!(state.clients.get(meet_id).unwrap().len(), 3);
+
+        handler2.unregister_client(meet_id);
+        assert!(state.clients.contains_key(meet_id));
     }
 
     #[tokio::test]

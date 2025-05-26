@@ -56,7 +56,6 @@ impl MeetHandle {
         let actor = MeetActor::new(meet_id, storage, relay_tx.clone());
 
         tokio::spawn(actor.run(cmd_rx));
-
         Ok(MeetHandle { cmd_tx, relay_tx })
     }
 
@@ -67,53 +66,43 @@ impl MeetHandle {
         updates: Vec<Update>,
     ) -> Result<Vec<(u64, u64)>, AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-
         self.cmd_tx.send(ActorMsg::Update {
             client_id,
             priority,
             updates,
             resp_tx,
         })?;
-
-        resp_rx
-            .recv()
-            .await
-            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+        resp_rx.recv().await.ok_or(AppError::Internal(
+            "Actor response channel closed".to_string(),
+        ))?
     }
 
+    /// Get updates since a specific sequence number
     pub async fn get_updates_since(
         &self,
         since: u64,
     ) -> Result<Vec<UpdateWithServerSeq>, AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-
         self.cmd_tx.send(ActorMsg::Pull { since, resp_tx })?;
-
-        resp_rx
-            .recv()
-            .await
-            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+        resp_rx.recv().await.ok_or(AppError::Internal(
+            "Actor response channel closed".to_string(),
+        ))?
     }
 
-    pub async fn store_csv_data(
-        &self,
-        opl_csv: String,
-        return_email: String,
-    ) -> Result<(), AppError> {
+    /// Store CSV data for the meet
+    pub async fn store_csv(&self, opl_csv: String, return_email: String) -> Result<(), AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-
         self.cmd_tx.send(ActorMsg::StoreCsv {
             opl_csv,
             return_email,
             resp_tx,
         })?;
-
-        resp_rx
-            .recv()
-            .await
-            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+        resp_rx.recv().await.ok_or(AppError::Internal(
+            "Actor response channel closed".to_string(),
+        ))?
     }
 
+    /// Recover state with updates
     pub async fn recover_state(
         &self,
         client_id: String,
@@ -121,18 +110,15 @@ impl MeetHandle {
         updates: Vec<crate::messages::Update>,
     ) -> Result<(u64, usize), AppError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel();
-
         self.cmd_tx.send(ActorMsg::RecoverState {
             client_id,
             priority,
             updates,
             resp_tx,
         })?;
-
-        resp_rx
-            .recv()
-            .await
-            .ok_or_else(|| AppError::Internal("Failed to receive response".to_string()))?
+        resp_rx.recv().await.ok_or(AppError::Internal(
+            "Actor response channel closed".to_string(),
+        ))?
     }
 }
 
@@ -510,12 +496,12 @@ impl<S: Storage> MeetActor<S> {
 
 /// Spawn a new meet actor and return its handle
 pub async fn spawn_meet_actor(meet_id: &str, storage: impl Storage + 'static) -> MeetHandle {
-    let (cmd_tx, rx_cmd) = mpsc::unbounded_channel();
+    let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (relay_tx, _) = broadcast::channel(32);
     let actor = MeetActor::new(meet_id.to_string(), storage, relay_tx.clone());
 
     tokio::spawn(async move {
-        actor.run(rx_cmd).await;
+        actor.run(cmd_rx).await;
     });
 
     MeetHandle { cmd_tx, relay_tx }

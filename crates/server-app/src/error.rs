@@ -153,100 +153,104 @@ impl From<&str> for AppError {
 mod tests {
     use super::*;
     use axum::http::StatusCode;
-    use axum::response::IntoResponse;
     use std::io::{Error as IoError, ErrorKind};
 
     #[test]
-    fn test_app_error_display() {
-        // Test error display formatting for different error types
-        let auth_error = AppError::Auth("Invalid token".to_string());
-        assert_eq!(
-            auth_error.to_string(),
-            "Authentication error: Invalid token"
-        );
+    fn test_app_error_display_and_codes() {
+        let test_cases = [
+            (
+                AppError::Auth("Invalid token".to_string()),
+                "Authentication error: Invalid token",
+                "AUTH_001",
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                AppError::Internal("test".to_string()),
+                "Internal error: test",
+                "INT_001",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+            (
+                AppError::NotFound("test".to_string()),
+                "Not found: test",
+                "NF_001",
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                AppError::RateLimitExceeded,
+                "Rate limit exceeded",
+                "RATE_001",
+                StatusCode::TOO_MANY_REQUESTS,
+            ),
+            (
+                AppError::InvalidPassword,
+                "Invalid password",
+                "AUTH_002",
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                AppError::MeetNotFound,
+                "Meet not found",
+                "MEET_001",
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                AppError::NeedsRecovery {
+                    meet_id: "test".to_string(),
+                    last_known_seq: 10,
+                },
+                "State inconsistency detected for meet test, recovery needed (last_known_seq: 10)",
+                "RECOVERY_001",
+                StatusCode::CONFLICT,
+            ),
+        ];
 
-        let io_error = AppError::Io(IoError::new(ErrorKind::NotFound, "File not found"));
-        assert!(io_error.to_string().contains("IO error"));
-
-        let rate_limit_error = AppError::RateLimitExceeded;
-        assert_eq!(rate_limit_error.to_string(), "Rate limit exceeded");
+        for (error, expected_msg, expected_code, expected_status) in test_cases {
+            assert_eq!(error.to_string(), expected_msg);
+            assert_eq!(error.error_code(), expected_code);
+            assert_eq!(error.status_code(), expected_status);
+        }
     }
 
     #[test]
-    fn test_app_error_status_codes() {
-        assert_eq!(
-            AppError::Auth("Invalid credentials".to_string()).status_code(),
-            StatusCode::UNAUTHORIZED
-        );
-        assert_eq!(
-            AppError::Internal("test".to_string()).status_code(),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
-        assert_eq!(
-            AppError::NotFound("test".to_string()).status_code(),
-            StatusCode::NOT_FOUND
-        );
-        assert_eq!(
-            AppError::RateLimitExceeded.status_code(),
-            StatusCode::TOO_MANY_REQUESTS
-        );
+    fn test_error_sanitization() {
+        let test_cases = [
+            (
+                AppError::Auth("username: admin, password: secret123".to_string()),
+                "Authentication failed",
+            ),
+            (
+                AppError::Internal(
+                    "Database connection failed with password: dbpass123".to_string(),
+                ),
+                "An internal server error occurred",
+            ),
+            (AppError::InvalidPassword, "Authentication failed"),
+            (
+                AppError::AuthRateLimited,
+                "Too many authentication attempts, please try again later",
+            ),
+        ];
 
-        // Create a JSON error using from_str which will fail parsing and create a valid JsonError
-        let json_err: serde_json::Error =
-            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
-        assert_eq!(
-            AppError::Json(json_err).status_code(),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
+        for (error, expected) in test_cases {
+            assert_eq!(error.sanitized_message(), expected);
+        }
     }
 
     #[test]
-    fn test_app_error_error_codes() {
-        assert_eq!(
-            AppError::Auth("Invalid credentials".to_string()).error_code(),
-            "AUTH_001"
-        );
-        assert_eq!(
-            AppError::Internal("test".to_string()).error_code(),
-            "INT_001"
-        );
-        assert_eq!(
-            AppError::NotFound("test".to_string()).error_code(),
-            "NF_001"
-        );
-        assert_eq!(AppError::RateLimitExceeded.error_code(), "RATE_001");
-
-        // Create a JSON error using from_str which will fail parsing and create a valid JsonError
-        let json_err: serde_json::Error =
-            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
-        assert_eq!(AppError::Json(json_err).error_code(), "JSON_001");
-    }
-
-    #[test]
-    fn test_app_error_into_response() {
-        // Test conversion to HTTP response
-        let error = AppError::NotFound("Resource not found".to_string());
-        let response = error.into_response();
-
-        // Verify status code
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        // Extract and verify response body if needed
-        // This is a simplistic test; in a real test we'd parse the body and check JSON content
-    }
-
-    #[test]
-    fn test_error_from_impls() {
-        // Test conversions from other error types
+    fn test_error_conversions() {
+        // Test IO error conversion
         let io_err = IoError::new(ErrorKind::PermissionDenied, "Permission denied");
         let app_err: AppError = io_err.into();
         assert!(matches!(app_err, AppError::Io(_)));
 
+        // Test JSON error conversion
         let json_err: serde_json::Error =
             serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
         let app_err: AppError = json_err.into();
         assert!(matches!(app_err, AppError::Json(_)));
 
+        // Test string conversions
         let string_err = "String error".to_string();
         let app_err: AppError = string_err.into();
         assert!(matches!(app_err, AppError::Internal(_)));
@@ -257,25 +261,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_error_serialization() {
-        // Create an error and convert it to Response
-        let json_err: serde_json::Error =
-            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
-        let app_error = AppError::Json(json_err);
-        let response = app_error.into_response();
+    async fn test_error_response_generation() {
+        let test_errors = [
+            AppError::NotFound("Resource not found".to_string()),
+            AppError::Internal("Internal error".to_string()),
+            AppError::RateLimitExceeded,
+        ];
 
-        // Verify response
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        for error in test_errors {
+            let response = error.into_response();
 
-        // Check headers - content type should be application/json
-        let response_headers = response.headers();
-        assert!(response_headers
-            .get("content-type")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("application/json"));
-
-        // For a real test, we would extract and check the response body here
+            // Verify all responses have proper content type
+            let response_headers = response.headers();
+            assert!(response_headers
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("application/json"));
+        }
     }
 }

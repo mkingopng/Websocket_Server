@@ -143,70 +143,6 @@ impl MeetSimulation {
         Ok(())
     }
 
-    /** Register a set of test lifters for the meet.
-    # Arguments
-    * `_storage` - Storage backend (not used directly, but could be used for persistence). */
-    #[allow(dead_code)]
-    async fn register_lifters(
-        &mut self,
-        _storage: &Arc<Mutex<FlatFileStorage>>,
-    ) -> Result<(), String> {
-        // Create test lifters
-        self.lifters = vec![
-            Lifter {
-                name: "John Smith".to_string(),
-                weight_class: "93kg".to_string(),
-                gender: "M".to_string(),
-                age: 25,
-            },
-            Lifter {
-                name: "Jane Doe".to_string(),
-                weight_class: "84kg".to_string(),
-                gender: "F".to_string(),
-                age: 28,
-            },
-            Lifter {
-                name: "Bob Johnson".to_string(),
-                weight_class: "105kg".to_string(),
-                gender: "M".to_string(),
-                age: 32,
-            },
-        ];
-
-        // Register each lifter
-        for lifter in &self.lifters {
-            let update = Update {
-                update_key: format!("lifter.{}", lifter.name),
-                update_value: Value::String(serde_json::to_string(lifter).unwrap()),
-                local_seq_num: 1,
-                after_server_seq_num: 0,
-            };
-            self.meet_handle
-                .apply_updates("test".to_string(), 1, vec![update])
-                .await
-                .map_err(|e| e.to_string())?;
-
-            // Initialize results for this lifter
-            self.results.push(MeetResult {
-                lifter_name: lifter.name.clone(),
-                weight_class: lifter.weight_class.clone(),
-                gender: lifter.gender.clone(),
-                age: lifter.age,
-                body_weight: 0.0,
-                squat_1: None,
-                squat_2: None,
-                squat_3: None,
-                bench_1: None,
-                bench_2: None,
-                bench_3: None,
-                deadlift_1: None,
-                deadlift_2: None,
-                deadlift_3: None,
-            });
-        }
-        Ok(())
-    }
-
     /** Simulate a single attempt for a lifter on a given lift.
     # Arguments
     * `lifter` - The lifter attempting the lift.
@@ -273,26 +209,6 @@ impl MeetSimulation {
         {
             result.body_weight = body_weight;
         }
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    async fn record_opening_attempt(
-        &mut self,
-        lifter: &Lifter,
-        lift: &str,
-        weight: f32,
-    ) -> Result<(), String> {
-        let update = Update {
-            update_key: format!("opening_attempt.{}.{}", lift, lifter.name),
-            update_value: Value::Number(serde_json::Number::from_f64(f64::from(weight)).unwrap()),
-            local_seq_num: 1,
-            after_server_seq_num: 0,
-        };
-        self.meet_handle
-            .apply_updates("test".to_string(), 1, vec![update])
-            .await
-            .map_err(|e| e.to_string())?;
         Ok(())
     }
 

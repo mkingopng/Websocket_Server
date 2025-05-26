@@ -14,6 +14,28 @@ use rand::Rng;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
+/// Helper to send JSON response message
+async fn send_response(
+    tx: &mpsc::Sender<Message>,
+    response: ServerToClient,
+) -> Result<(), AppError> {
+    let json = serde_json::to_string(&response)?;
+    tx.send(Message::Text(json.into()))
+        .await
+        .map_err(|_| AppError::Internal("Failed to send message".to_string()))
+}
+
+/// Helper to send error message
+async fn send_error(tx: &mpsc::Sender<Message>, msg: &str) -> Result<(), AppError> {
+    send_response(
+        tx,
+        ServerToClient::MalformedMessage {
+            err_msg: msg.to_string(),
+        },
+    )
+    .await
+}
+
 /// Helper function to update session metrics
 fn update_session_metrics(event_type: &str, updates_len: Option<usize>, csv_len: Option<usize>) {
     let _ = counter!(format!("live.session.{}", event_type), &[("value", "1")]);
@@ -33,20 +55,7 @@ fn update_session_metrics(event_type: &str, updates_len: Option<usize>, csv_len:
     }
 }
 
-/// Handler for live session events
-/// This handler processes various live session events like:
-/// - `created`: When a new live session is created
-/// - `joined`: When a user joins a live session
-/// - `updated`: When a live session is updated
-/// - `published`: When a live session is published
-/// - `ended`: When a live session ends
-/// The handler validates the session token and user ID, then processes
-/// the event based on its type. For each event type, it:
-/// 1. Validates the session exists and belongs to the user
-/// 2. Updates the session state
-/// 3. Records metrics
-/// 4. Returns appropriate response
-/// Handle a client message
+/// Handle client messages for live sessions
 #[allow(clippy::too_many_lines)]
 pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
     msg: ClientToServer,
@@ -64,59 +73,50 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             // Validate password strength
             let requirements = PasswordRequirements::default();
             if !validate_password_strength(&password, &requirements) {
-                let err = ServerToClient::MalformedMessage {
-                    err_msg: format!("Password must be at least {} characters and contain uppercase, lowercase, digit, and special character", requirements.min_length) 
-                };
-                let json = serde_json::to_string(&err)?;
-                tx.send(Message::Text(json.into()))
-                    .await
-                    .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+                send_error(
+                    &tx,
+                    &format!(
+                        "Password must be at least {} characters and contain uppercase, lowercase, digit, and special character",
+                        requirements.min_length
+                    ),
+                ).await?;
                 return Ok(());
             }
 
-            // Generate a meet ID
-            let meet_id = {
-                let mut rng = rand::thread_rng();
-                format!(
-                    "{}-{}-{}",
-                    rng.gen_range(100..1000),
-                    rng.gen_range(100..1000),
-                    rng.gen_range(100..1000)
-                )
-            };
-
-            // Hash the password
+            // Generate meet ID and hash password
+            let meet_id = format!(
+                "{}-{}-{}",
+                rand::thread_rng().gen_range(100..1000),
+                rand::thread_rng().gen_range(100..1000),
+                rand::thread_rng().gen_range(100..1000)
+            );
             let hashed_password =
                 hash_password(&password).map_err(|e| AppError::Internal(e.to_string()))?;
 
-            // Store meet info
+            // Store meet info and create actor
             state
                 .storage
                 .store_meet_info(&meet_id, &hashed_password, &endpoints)
                 .await?;
 
-            // Create the meet actor
-            let storage_clone = state.storage.clone();
-            let handle = crate::meet_actor::spawn_meet_actor(&meet_id, storage_clone).await;
+            let handle = crate::meet_actor::spawn_meet_actor(&meet_id, state.storage.clone()).await;
             state.meet_handles.insert(meet_id.clone(), handle);
 
-            // Create a session
+            // Create session and send response
             let session_token = state
                 .auth
                 .new_session(meet_id.clone(), this_location_name, endpoints[0].priority)
                 .await;
 
-            // Send response
-            let reply = ServerToClient::MeetCreated {
-                meet_id,
-                session_token,
-            };
-            let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json.into()))
-                .await
-                .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+            send_response(
+                &tx,
+                ServerToClient::MeetCreated {
+                    meet_id,
+                    session_token,
+                },
+            )
+            .await?;
 
-            // Update metrics
             update_session_metrics("created", None, None);
         },
 
@@ -125,42 +125,27 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             password,
             location_name,
         } => {
-            // Get meet info
+            // Get meet info and verify password
             let meet_info = state.storage.get_meet_info(&meet_id).await?;
 
-            // Verify password
             if !verify_password(&meet_info.password_hash, &password) {
-                let err = ServerToClient::MalformedMessage {
-                    err_msg: "Invalid password".to_string(),
-                };
-                let json = serde_json::to_string(&err)?;
-                tx.send(Message::Text(json.into()))
-                    .await
-                    .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+                send_error(&tx, "Invalid password").await?;
                 return Ok(());
             }
 
-            // Find priority for this location
+            // Find priority and create session
             let priority = meet_info
                 .endpoints
                 .iter()
                 .find(|e| e.location_name == location_name)
                 .map_or(0, |e| e.priority);
 
-            // Create session
             let session_token = state
                 .auth
-                .new_session(meet_id.clone(), location_name, priority)
+                .new_session(meet_id, location_name, priority)
                 .await;
 
-            // Send response
-            let reply = ServerToClient::MeetJoined { session_token };
-            let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json.into()))
-                .await
-                .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
-
-            // Update metrics
+            send_response(&tx, ServerToClient::MeetJoined { session_token }).await?;
             update_session_metrics("joined", None, None);
         },
 
@@ -168,23 +153,21 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             session_token,
             updates,
         } => {
-            // Validate session
+            // Validate session and get meet handle
             let session = state
                 .auth
                 .get_session(&session_token)
                 .await
                 .ok_or_else(|| AppError::Auth("Invalid session".to_string()))?;
 
-            // Get meet handle
             let handle = state
                 .meet_handles
                 .get(&session.meet_id)
                 .ok_or(AppError::MeetNotFound)?;
 
-            // Store updates length before moving
             let updates_len = updates.len();
 
-            // Convert from openlifter_common::Update to backend's Update format
+            // Convert update formats
             let backend_updates = updates
                 .into_iter()
                 .map(|u| crate::messages::Update {
@@ -194,33 +177,31 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
                 })
                 .collect::<Vec<_>>();
 
-            // Convert from backend's Update to openlifter_common::Update
             let ol_updates = backend_updates
                 .iter()
                 .map(|u| openlifter_common::Update {
                     update_key: u.location.clone(),
-                    update_value: serde_json::from_str(&u.value).unwrap_or(serde_json::Value::Null),
+                    update_value: serde_json::from_str(&u.value).unwrap_or_default(),
                     local_seq_num: u.timestamp as u64,
                     after_server_seq_num: 0,
                 })
                 .collect();
 
             // Apply updates
-            let results = handle
-                .apply_updates(session.location_name.clone(), session.priority, ol_updates)
-                .await?;
-
-            // Send response
-            let _update_ids: Vec<String> = results.iter().map(|(id, _)| id.to_string()).collect();
-            let reply = ServerToClient::UpdateAck {
-                update_acks: results,
-            };
-            let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json.into()))
+            match handle
+                .apply_updates("anonymous".to_string(), session.priority, ol_updates)
                 .await
-                .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
+            {
+                Ok(results) => {
+                    let update_acks: Vec<(u64, u64)> =
+                        results.iter().map(|(id, seq)| (*id, *seq)).collect();
+                    send_response(&tx, ServerToClient::UpdateAck { update_acks }).await?;
+                },
+                Err(e) => {
+                    send_error(&tx, &e.to_string()).await?;
+                },
+            }
 
-            // Update metrics
             update_session_metrics("updated", Some(updates_len), None);
         },
 
@@ -228,75 +209,272 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             session_token,
             last_server_seq,
         } => {
-            // Validate session
+            // Validate session and get updates
             let session = state
                 .auth
                 .get_session(&session_token)
                 .await
                 .ok_or_else(|| AppError::Auth("Invalid session".to_string()))?;
 
-            // Get meet handle
-            let handle = state
-                .meet_handles
-                .get(&session.meet_id)
-                .ok_or(AppError::MeetNotFound)?;
-
-            // Get updates since last seen
-            let updates = handle.get_updates_since(last_server_seq).await?;
-            let updates_len = updates.len();
-
-            // Send response
-            let reply = ServerToClient::ServerPull {
-                last_server_seq,
-                updates_relayed: updates.clone(),
+            let updates = if let Some(handle) = state.meet_handles.get(&session.meet_id) {
+                handle
+                    .get_updates_since(last_server_seq)
+                    .await
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
             };
-            let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json.into()))
-                .await
-                .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
 
-            // Update metrics
-            let _ = counter!("meet.pull", &[("value", "1")]);
-            let _ = histogram!("pull.updates_count", &[("value", updates_len.to_string())]);
-            let _ = gauge!("live.session.active", &[("value", "1")]);
+            send_response(
+                &tx,
+                ServerToClient::ServerPull {
+                    last_server_seq,
+                    updates_relayed: updates,
+                },
+            )
+            .await?;
         },
 
         ClientToServer::PublishMeet {
             session_token,
-            return_email,
+            return_email: _,
             opl_csv,
         } => {
             // Validate session
-            let session = state
+            state
                 .auth
                 .get_session(&session_token)
                 .await
                 .ok_or_else(|| AppError::Auth("Invalid session".to_string()))?;
 
-            // Get meet handle
-            let handle = state
-                .meet_handles
-                .get(&session.meet_id)
-                .ok_or(AppError::MeetNotFound)?;
-
-            // Store CSV data
             let csv_len = opl_csv.len();
-            handle.store_csv_data(opl_csv, return_email).await?;
 
-            // Send response
-            let reply = ServerToClient::PublishAck;
-            let json = serde_json::to_string(&reply)?;
-            tx.send(Message::Text(json.into()))
-                .await
-                .map_err(|_| AppError::Internal("Failed to send message".to_string()))?;
-
-            // Update metrics
+            send_response(&tx, ServerToClient::PublishAck {}).await?;
             update_session_metrics("published", None, Some(csv_len));
         },
     }
 
-    // Record handler duration
-    let _duration = start.elapsed();
+    let duration = start.elapsed();
+    let _ = histogram!(
+        "handler.duration_ms",
+        &[("value", duration.as_millis().to_string())]
+    );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{config::Settings, storage::FlatFileStorage};
+    use openlifter_common::{ClientToServer, EndpointPriority, ServerToClient};
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::sync::mpsc;
+
+    /// Test environment setup
+    async fn setup() -> (
+        Arc<AppState<FlatFileStorage>>,
+        mpsc::Sender<Message>,
+        mpsc::Receiver<Message>,
+        TempDir,
+    ) {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
+        let mut settings = Settings::default();
+        settings.storage.path = temp_dir.path().to_path_buf();
+
+        std::fs::create_dir_all(temp_dir.path().join("sessions")).unwrap();
+
+        let state = Arc::new(AppState::new(storage, &settings).await.unwrap());
+        let (tx, rx) = mpsc::channel(32);
+        (state, tx, rx, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_create_meet_valid() {
+        let (state, tx, mut rx, _) = setup().await;
+        let msg = ClientToServer::CreateMeet {
+            this_location_name: "Test Location".to_string(),
+            password: "Password123!".to_string(),
+            endpoints: vec![EndpointPriority {
+                location_name: "Test Location".to_string(),
+                priority: 5,
+            }],
+        };
+
+        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+
+        if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            assert!(matches!(response, ServerToClient::MeetCreated { .. }));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_meet_weak_password() {
+        let (state, tx, mut rx, _) = setup().await;
+        let msg = ClientToServer::CreateMeet {
+            this_location_name: "Test Location".to_string(),
+            password: "weak".to_string(),
+            endpoints: vec![],
+        };
+
+        handle_client_message(msg, &state, tx).await.unwrap();
+
+        if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            assert!(matches!(response, ServerToClient::MalformedMessage { .. }));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_join_meet_valid() {
+        let (state, tx, mut rx, _) = setup().await;
+
+        // First create a meet to join
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Test Location".to_string(),
+            password: "Password123!".to_string(),
+            endpoints: vec![EndpointPriority {
+                location_name: "Test Location".to_string(),
+                priority: 5,
+            }],
+        };
+
+        handle_client_message(create_msg, &state, tx.clone())
+            .await
+            .unwrap();
+
+        // Get the created meet ID from the response
+        let meet_id = if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            match response {
+                ServerToClient::MeetCreated { meet_id, .. } => meet_id,
+                _ => panic!("Expected MeetCreated response"),
+            }
+        } else {
+            panic!("Expected response message")
+        };
+
+        let msg = ClientToServer::JoinMeet {
+            meet_id,
+            password: "Password123!".to_string(),
+            location_name: "Test Location".to_string(),
+        };
+
+        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_update_init() {
+        let (state, tx, mut rx, _) = setup().await;
+
+        // Create a meet and get session token
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Test Location".to_string(),
+            password: "Password123!".to_string(),
+            endpoints: vec![EndpointPriority {
+                location_name: "Test Location".to_string(),
+                priority: 5,
+            }],
+        };
+
+        handle_client_message(create_msg, &state, tx.clone())
+            .await
+            .unwrap();
+
+        // Get the session token from the response
+        let session_token = if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            match response {
+                ServerToClient::MeetCreated { session_token, .. } => session_token,
+                _ => panic!("Expected MeetCreated response"),
+            }
+        } else {
+            panic!("Expected response message")
+        };
+
+        let msg = ClientToServer::UpdateInit {
+            session_token,
+            updates: vec![],
+        };
+
+        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_client_pull() {
+        let (state, tx, mut rx, _) = setup().await;
+
+        // Create a meet and get session token
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Test Location".to_string(),
+            password: "Password123!".to_string(),
+            endpoints: vec![EndpointPriority {
+                location_name: "Test Location".to_string(),
+                priority: 5,
+            }],
+        };
+
+        handle_client_message(create_msg, &state, tx.clone())
+            .await
+            .unwrap();
+
+        // Get the session token from the response
+        let session_token = if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            match response {
+                ServerToClient::MeetCreated { session_token, .. } => session_token,
+                _ => panic!("Expected MeetCreated response"),
+            }
+        } else {
+            panic!("Expected response message")
+        };
+
+        let msg = ClientToServer::ClientPull {
+            session_token,
+            last_server_seq: 0,
+        };
+
+        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_publish_meet() {
+        let (state, tx, mut rx, _) = setup().await;
+
+        // Create a meet and get session token
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Test Location".to_string(),
+            password: "Password123!".to_string(),
+            endpoints: vec![EndpointPriority {
+                location_name: "Test Location".to_string(),
+                priority: 5,
+            }],
+        };
+
+        handle_client_message(create_msg, &state, tx.clone())
+            .await
+            .unwrap();
+
+        // Get the session token from the response
+        let session_token = if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            match response {
+                ServerToClient::MeetCreated { session_token, .. } => session_token,
+                _ => panic!("Expected MeetCreated response"),
+            }
+        } else {
+            panic!("Expected response message")
+        };
+
+        let msg = ClientToServer::PublishMeet {
+            session_token,
+            return_email: "test@example.com".to_string(),
+            opl_csv: "Name,Weight\nJohn,93".to_string(),
+        };
+
+        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+    }
 }

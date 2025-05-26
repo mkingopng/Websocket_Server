@@ -8,12 +8,25 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Running pre-commit checks${NC}"
 
-# Check if any Rust files will be committed
-RUST_FILES=$(git diff --cached --name-only | grep -E '\.rs$')
-if [ -z "$RUST_FILES" ]; then
-    echo -e "${GREEN}No Rust files to check.${NC}"
-    exit 0
+# Check if any Rust files exist (either staged or in working directory)
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    # If we're in a git repo, check staged files first, then all Rust files
+    RUST_FILES=$(git diff --cached --name-only | grep -E '\.rs$')
+    if [ -z "$RUST_FILES" ]; then
+        # No staged files, check if any Rust files exist in the project
+        RUST_FILES=$(find . -name "*.rs" -not -path "./target/*" | head -1)
+    fi
+else
+    # Not in a git repo, just check for Rust files
+    RUST_FILES=$(find . -name "*.rs" -not -path "./target/*" | head -1)
 fi
+
+if [ -z "$RUST_FILES" ]; then
+    echo -e "${RED}No Rust files found to check.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Found Rust files to check.${NC}"
 
 # 1. Run cargo fmt to check formatting
 echo "Checking code formatting..."
@@ -51,29 +64,17 @@ else
     echo -e "${GREEN}Compilation check passed.${NC}"
 fi
 
-# 4. Run unit tests
-echo "Running unit tests..."
-cargo test --lib
-UNIT_TEST_RESULT=$?
+# 4. Run all tests
+echo "Running tests..."
+cargo test
+TEST_RESULT=$?
 
-if [ $UNIT_TEST_RESULT -ne 0 ]; then
-    echo -e "${RED}Unit tests failed. Please fix the issues before committing.${NC}"
+if [ $TEST_RESULT -ne 0 ]; then
+    echo -e "${RED}Tests failed. Please fix the issues before committing.${NC}"
     exit 1
 else
-    echo -e "${GREEN}Unit tests passed.${NC}"
+    echo -e "${GREEN}Tests passed.${NC}"
 fi
 
-# 5. Run integration tests
-echo "Running integration tests..."
-cargo test integration::
-INTEGRATION_TEST_RESULT=$?
-
-if [ $INTEGRATION_TEST_RESULT -ne 0 ]; then
-    echo -e "${RED}Integration tests failed. Please fix the issues before committing.${NC}"
-    exit 1
-else
-    echo -e "${GREEN}Integration tests passed.${NC}"
-fi
-
-echo -e "${GREEN}All checks passed! Commit is ready to be created.${NC}"
+echo -e "${GREEN}All checks passed!${NC}"
 exit 0 
