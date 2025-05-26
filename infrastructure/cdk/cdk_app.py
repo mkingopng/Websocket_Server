@@ -1,61 +1,93 @@
+#!/usr/bin/env python3
+
 from aws_cdk import (
-    Stack,
     aws_ec2 as ec2,
     aws_ecs as ecs,
-    aws_ecs_patterns as ecs_patterns,
-    aws_certificatemanager as acm,
-    aws_route53 as route53,
-    aws_route53_targets as targets,
+    aws_elasticloadbalancingv2 as elbv2,
+    aws_iam as iam,
+    aws_logs as logs,
+    core,
 )
-from constructs import Construct
 
-class WSBackendStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, **kwargs):
-        super().__init__(scope, construct_id, **kwargs)
+class OpenLifterStack(core.Stack):
+    def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
+        super().__init__(scope, id, **kwargs)
 
-        # Lookup your hosted zone
-        zone = route53.HostedZone.from_lookup(
-            self, "HostedZone", domain_name="apl-lights.com"
-        )
+        # Create a VPC
+        vpc = ec2.Vpc(self, "OpenLifterVPC", max_azs=2)
 
-        # Request a TLS cert for subdomain
-        cert = acm.Certificate(
-            self, "BackendCert",
-            domain_name="server-app.apl-lights.com",
-            validation=acm.CertificateValidation.from_dns(zone)
-        )
+        # Create an ECS cluster
+        cluster = ecs.Cluster(self, "OpenLifterCluster", vpc=vpc)
 
-        # Create VPC and ECS cluster
-        vpc = ec2.Vpc(self, "WSVpc", max_azs=2)
-        cluster = ecs.Cluster(self, "WSCluster", vpc=vpc)
-
-        # Deploy Fargate Service + ALB
-        fargate_service = ecs_patterns.ApplicationLoadBalancedFargateService(
-            self, "WSBackendService",
-            cluster=cluster,
-            cpu=256,
-            desired_count=1,
+        # Create a task definition
+        task_definition = ecs.FargateTaskDefinition(self, "OpenLifterTask",
             memory_limit_mib=512,
-            public_load_balancer=True,
-            domain_name="server-app.apl-lights.com",
-            domain_zone=zone,
-            certificate=cert,
-            listener_port=443,
-            task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
-                image=ecs.ContainerImage.from_registry(
-                    "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/ws-server-app"
-                ),
-                container_port=9001,
-            )
+            cpu=256,
         )
 
-        # Optional: Health check path
-        fargate_service.target_group.configure_health_check(path="/health")
-
-        # Optional: DNS record
-        route53.ARecord(
-            self, "BackendDNS",
-            zone=zone,
-            target=route53.RecordTarget.from_alias(targets.LoadBalancerTarget(fargate_service.load_balancer)),
-            record_name="server-app"
+        # Add a container to the task definition
+        container = task_definition.add_container("OpenLifterContainer",
+            image=ecs.ContainerImage.from_asset("."),
+            logging=ecs.LogDrivers.aws_logs(
+                stream_prefix="OpenLifter",
+                log_retention=logs.RetentionDays.ONE_WEEK,
+            ),
         )
+
+        # Add port mappings
+        container.add_port_mappings(ecs.PortMapping(container_port=3000))
+
+        # Create a security group for the load balancer
+        lb_security_group = ec2.SecurityGroup(self, "LBSecurityGroup",
+            vpc=vpc,
+            description="Security group for the load balancer",
+        )
+
+        # Allow inbound traffic on port 80
+        lb_security_group.add_ingress_rule(
+            ec2.Peer.any_ipv4(),
+            ec2.Port.tcp(80),
+            "Allow HTTP traffic",
+        )
+
+        # Create a load balancer
+        lb = elbv2.ApplicationLoadBalancer(self, "OpenLifterLB",
+            vpc=vpc,
+            internet_facing=True,
+            security_group=lb_security_group,
+        )
+
+        # Add a listener to the load balancer
+        listener = lb.add_listener("Listener",
+            port=80,
+        )
+
+        # Create a target group
+        target_group = elbv2.ApplicationTargetGroup(self, "OpenLifterTargetGroup",
+            vpc=vpc,
+            port=3000,
+            protocol=elbv2.ApplicationProtocol.HTTP,
+            target_type=elbv2.TargetType.IP,
+        )
+
+        # Add the target group to the listener
+        listener.add_target_groups("OpenLifterTargetGroup", target_groups=[target_group])
+
+        # Create a service
+        service = ecs.FargateService(self, "OpenLifterService",
+            cluster=cluster,
+            task_definition=task_definition,
+            desired_count=1,
+            assign_public_ip=True,
+            security_groups=[lb_security_group],
+        )
+
+        # Add the service to the target group
+        service.attach_to_application_target_group(target_group)
+
+        # Output the load balancer DNS name
+        core.CfnOutput(self, "LoadBalancerDNS", value=lb.load_balancer_dns_name)
+
+app = core.App()
+OpenLifterStack(app, "OpenLifterStack")
+app.synth()

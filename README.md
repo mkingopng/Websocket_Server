@@ -1,6 +1,75 @@
 # OpenLifter WebSocket Server
 
-A WebSocket server for real-time meet management in OpenLifter.
+This project is a WebSocket-based backend server for OpenLifter, designed to handle real-time communication, meet management, and authentication.
+
+## Overview
+
+The server is built using Rust and is organized into several crates:
+- **server-app**: The main binary crate that serves as the entrypoint. It initializes the WebSocket server, loads configuration, and orchestrates the startup process.
+- **server-core**: Contains the core business logic, services, and state management used by the application.
+- **server-protocols**: Defines the WebSocket protocol messages and data structures for client-server communication.
+
+## High-Level Flow
+
+Below is a mermaid flow chart describing the high-level flow of the program:
+
+```mermaid
+graph TD
+    A[Client] -->|Connect| B[WebSocket Server]
+    B -->|Initialize| C[server-app]
+    C -->|Load Config| D[Configuration]
+    C -->|Start Server| E[WebSocket Handler]
+    E -->|Route Messages| F[Message Router]
+    F -->|Validate Input| G[Validation]
+    F -->|Authenticate| H[Auth Service]
+    F -->|Process Meet Events| I[Meet Actor]
+    I -->|Update State| J[Storage]
+    J -->|Persist Data| K[server-storage]
+    H -->|Session Management| L[Session Storage]
+    L -->|Store Sessions| K
+```
+
+## Directory Structure
+
+- **crates/server-app/**: Main application entrypoint and WebSocket server logic.
+- **crates/server-core/**: Core business logic and services.
+- **crates/server-protocols/**: WebSocket protocol definitions.
+- **server-storage/**: Persistent storage for meets and sessions.
+- **tests/**: Unit, integration, and end-to-end tests.
+- **infrastructure/**: AWS CDK app for deploying the server.
+- **documentation/**: Design documents, test coverage reports, and development notes.
+
+## Getting Started
+
+1. **Build the project**:
+   ```bash
+   cargo build
+   ```
+
+2. **Run the server**:
+   ```bash
+   cargo run -p server-app
+   ```
+
+3. **Run tests**:
+   ```bash
+   cargo test
+   ```
+
+4. **Deploy infrastructure**:
+   ```bash
+   cd infrastructure/cdk
+   pip install -r requirements.txt
+   cdk deploy
+   ```
+
+## Contributing
+
+Please refer to the [documentation](./documentation/development.md) for guidelines on contributing to this project.
+
+## License
+
+This project is licensed under the terms of the license included in the [LICENSE](./LICENSE) file.
 
 ## Features
 
