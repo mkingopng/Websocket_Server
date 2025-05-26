@@ -1,17 +1,23 @@
 // ============================
-// crates/server-app/tests/websocket_flow_tests.rs
+// tests/integration/websocket_flow_tests.rs
 // ============================
 //! Integration tests for WebSocket flows.
 
+use crate::test_utils::{
+    next_message_with_timeout, safe_close_connection, setup_server, unique_meet_id,
+};
 use backend_lib::{
     config::Settings,
     messages::{ClientMessage, ServerMessage, Update},
     websocket::WebSocketHandler,
     AppState,
 };
+use futures_util::SinkExt;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
+use tokio::time::Duration;
+use tokio_tungstenite::tungstenite::Message;
 
 /// Helper to set up a test environment
 #[allow(dead_code)]
@@ -44,18 +50,13 @@ async fn setup() -> (
 #[tokio::test]
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_complete_flow() {
-    use backend_lib::messages::{ClientMessage, ServerMessage, Update};
-    use futures_util::SinkExt;
-    use tokio::time::Duration;
-    use tokio_tungstenite::tungstenite::Message;
-
     // Run with overall timeout
     let test_future = async {
-        let (addr, _state, _temp_dir) = crate::tests::setup_server().await;
+        let (addr, _state, _temp_dir) = setup_server().await;
         let url = format!("ws://{addr}/ws");
 
         // Use unique meet ID
-        let meet_id = crate::tests::unique_meet_id("flow-meet");
+        let meet_id = unique_meet_id("flow-meet");
 
         // Connect to the server
         let (mut ws_stream, _) = tokio_tungstenite::connect_async(url)
@@ -70,14 +71,11 @@ async fn test_complete_flow() {
             priority: 1,
         };
         ws_stream
-            .send(Message::Text(
-                serde_json::to_string(&create_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
             .await
             .unwrap();
 
-        let create_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream, 5, "Create meet").await;
+        let create_response = next_message_with_timeout(&mut ws_stream, 5, "Create meet").await;
         let create_result: ServerMessage =
             serde_json::from_str(create_response.to_text().unwrap()).unwrap();
         let ServerMessage::MeetCreated { session_token, .. } = create_result else {
@@ -95,14 +93,11 @@ async fn test_complete_flow() {
             }],
         };
         ws_stream
-            .send(Message::Text(
-                serde_json::to_string(&update_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&update_msg).unwrap()))
             .await
             .unwrap();
 
-        let update_ack_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream, 5, "Update ack").await;
+        let update_ack_response = next_message_with_timeout(&mut ws_stream, 5, "Update ack").await;
         let update_ack_result: ServerMessage =
             serde_json::from_str(update_ack_response.to_text().unwrap()).unwrap();
         assert!(matches!(update_ack_result, ServerMessage::UpdateAck { .. }));
@@ -114,14 +109,11 @@ async fn test_complete_flow() {
             last_server_seq: 0,
         };
         ws_stream
-            .send(Message::Text(
-                serde_json::to_string(&pull_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&pull_msg).unwrap()))
             .await
             .unwrap();
 
-        let pull_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream, 5, "Client pull").await;
+        let pull_response = next_message_with_timeout(&mut ws_stream, 5, "Client pull").await;
         let pull_result: ServerMessage =
             serde_json::from_str(pull_response.to_text().unwrap()).unwrap();
         assert!(matches!(pull_result, ServerMessage::ServerPull { .. }));
@@ -134,14 +126,12 @@ async fn test_complete_flow() {
             opl_csv: "data".to_string(),
         };
         ws_stream
-            .send(Message::Text(
-                serde_json::to_string(&publish_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&publish_msg).unwrap()))
             .await
             .unwrap();
 
         let publish_ack_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream, 5, "Publish ack").await;
+            next_message_with_timeout(&mut ws_stream, 5, "Publish ack").await;
         let publish_ack_result: ServerMessage =
             serde_json::from_str(publish_ack_response.to_text().unwrap()).unwrap();
         assert!(matches!(
@@ -150,7 +140,7 @@ async fn test_complete_flow() {
         ));
 
         // Close connection safely
-        crate::tests::safe_close_connection(&mut ws_stream).await;
+        safe_close_connection(&mut ws_stream).await;
     };
 
     // Run with overall timeout
@@ -191,18 +181,13 @@ async fn test_invalid_session() {
 #[tokio::test]
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_broadcast_and_client_communication() {
-    use backend_lib::messages::{ClientMessage, ServerMessage, Update};
-    use futures_util::SinkExt;
-    use tokio::time::Duration;
-    use tokio_tungstenite::tungstenite::Message;
-
     // Run with overall timeout
     let test_future = async {
-        let (addr, _state, _temp_dir) = crate::tests::setup_server().await;
+        let (addr, _state, _temp_dir) = setup_server().await;
         let url = format!("ws://{addr}/ws");
 
         // Use unique meet ID
-        let meet_id = crate::tests::unique_meet_id("broadcast-meet");
+        let meet_id = unique_meet_id("broadcast-meet");
 
         // Connect client 1
         let (mut ws_stream1, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
@@ -213,14 +198,11 @@ async fn test_broadcast_and_client_communication() {
             priority: 1,
         };
         ws_stream1
-            .send(Message::Text(
-                serde_json::to_string(&create_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
             .await
             .unwrap();
 
-        let create_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Create meet").await;
+        let create_response = next_message_with_timeout(&mut ws_stream1, 5, "Create meet").await;
         let create_result: ServerMessage =
             serde_json::from_str(create_response.to_text().unwrap()).unwrap();
         let ServerMessage::MeetCreated {
@@ -240,14 +222,11 @@ async fn test_broadcast_and_client_communication() {
             priority: 2,
         };
         ws_stream2
-            .send(Message::Text(
-                serde_json::to_string(&join_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&join_msg).unwrap()))
             .await
             .unwrap();
 
-        let join_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream2, 5, "Join meet").await;
+        let join_response = next_message_with_timeout(&mut ws_stream2, 5, "Join meet").await;
         let join_result: ServerMessage =
             serde_json::from_str(join_response.to_text().unwrap()).unwrap();
         let ServerMessage::MeetJoined {
@@ -269,15 +248,12 @@ async fn test_broadcast_and_client_communication() {
             }],
         };
         ws_stream1
-            .send(Message::Text(
-                serde_json::to_string(&update_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&update_msg).unwrap()))
             .await
             .unwrap();
 
         // Client 1 receives ACK
-        let update_ack_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Update ack").await;
+        let update_ack_response = next_message_with_timeout(&mut ws_stream1, 5, "Update ack").await;
         let update_ack_result: ServerMessage =
             serde_json::from_str(update_ack_response.to_text().unwrap()).unwrap();
         assert!(matches!(update_ack_result, ServerMessage::UpdateAck { .. }));
@@ -285,8 +261,8 @@ async fn test_broadcast_and_client_communication() {
         // Close connections safely - we'll skip checking for relay messages since they may not always be received
         // depending on timing and environment
         println!("Skipping relay message check due to potential timing issues");
-        crate::tests::safe_close_connection(&mut ws_stream1).await;
-        crate::tests::safe_close_connection(&mut ws_stream2).await;
+        safe_close_connection(&mut ws_stream1).await;
+        safe_close_connection(&mut ws_stream2).await;
     };
 
     // Run with overall timeout
@@ -324,7 +300,7 @@ async fn test_reconnection_and_retry() {
     let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
 
     // Register the client
-    handler.register_client(meet_id, tx.clone());
+    let _ = handler.register_client(meet_id, tx.clone());
 
     // Step 2: Simulate sending an update with an invalid session token
     // to trigger the reconnection logic
@@ -401,18 +377,13 @@ async fn test_reconnection_and_retry() {
 #[tokio::test]
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_state_recovery_scenarios() {
-    use backend_lib::messages::{ClientMessage, ServerMessage, Update};
-    use futures_util::SinkExt;
-    use tokio::time::Duration;
-    use tokio_tungstenite::tungstenite::Message;
-
     // Create an overall timeout for the test
     let test_future = async {
-        let (addr, _state, _temp_dir) = crate::tests::setup_server().await;
+        let (addr, _state, _temp_dir) = setup_server().await;
         let url = format!("ws://{addr}/ws");
 
         // Use unique meet ID
-        let meet_id = crate::tests::unique_meet_id("recovery-meet");
+        let meet_id = unique_meet_id("recovery-meet");
 
         // Connect client 1 (priority 8)
         let (mut ws_stream1, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
@@ -423,15 +394,12 @@ async fn test_state_recovery_scenarios() {
             priority: 8, // Higher priority client
         };
         ws_stream1
-            .send(Message::Text(
-                serde_json::to_string(&create_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
             .await
             .unwrap();
 
         // Wait for response with timeout
-        let create_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Create meet").await;
+        let create_response = next_message_with_timeout(&mut ws_stream1, 5, "Create meet").await;
 
         let create_result: ServerMessage =
             serde_json::from_str(create_response.to_text().unwrap()).unwrap();
@@ -454,15 +422,12 @@ async fn test_state_recovery_scenarios() {
             }],
         };
         ws_stream1
-            .send(Message::Text(
-                serde_json::to_string(&update_msg1).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&update_msg1).unwrap()))
             .await
             .unwrap();
 
         // Client 1 receives ACK (with timeout)
-        let ack_response1 =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Update ack").await;
+        let ack_response1 = next_message_with_timeout(&mut ws_stream1, 5, "Update ack").await;
 
         let ack_result1: ServerMessage =
             serde_json::from_str(ack_response1.to_text().unwrap()).unwrap();
@@ -480,14 +445,14 @@ async fn test_state_recovery_scenarios() {
         };
         ws_stream1
             .send(Message::Text(
-                serde_json::to_string(&update_msg1_gap).unwrap().into(),
+                serde_json::to_string(&update_msg1_gap).unwrap(),
             ))
             .await
             .unwrap();
 
         // Client 1 should receive a StateRecoveryRequest (with timeout)
         let recovery_response1 =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Recovery request").await;
+            next_message_with_timeout(&mut ws_stream1, 5, "Recovery request").await;
 
         let recovery_result1: ServerMessage =
             serde_json::from_str(recovery_response1.to_text().unwrap()).unwrap();
@@ -506,7 +471,7 @@ async fn test_state_recovery_scenarios() {
         }
 
         // Close connection safely
-        crate::tests::safe_close_connection(&mut ws_stream1).await;
+        safe_close_connection(&mut ws_stream1).await;
     };
 
     // Run with overall timeout
@@ -521,18 +486,13 @@ async fn test_state_recovery_scenarios() {
 #[tokio::test]
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_inactivity_recovery() {
-    use backend_lib::messages::{ClientMessage, ServerMessage, Update};
-    use futures_util::SinkExt;
-    use tokio::time::Duration;
-    use tokio_tungstenite::tungstenite::Message;
-
     // Run with an overall timeout
     let test_future = async {
-        let (addr, _state, _temp_dir) = crate::tests::setup_server().await;
+        let (addr, _state, _temp_dir) = setup_server().await;
         let url = format!("ws://{addr}/ws");
 
         // Use unique meet ID
-        let meet_id = crate::tests::unique_meet_id("inactivity-meet");
+        let meet_id = unique_meet_id("inactivity-meet");
 
         // Connect client 1
         let (mut ws_stream1, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
@@ -543,14 +503,11 @@ async fn test_inactivity_recovery() {
             priority: 5,
         };
         ws_stream1
-            .send(Message::Text(
-                serde_json::to_string(&create_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
             .await
             .unwrap();
 
-        let create_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Create meet").await;
+        let create_response = next_message_with_timeout(&mut ws_stream1, 5, "Create meet").await;
         let create_result: ServerMessage =
             serde_json::from_str(create_response.to_text().unwrap()).unwrap();
         let ServerMessage::MeetCreated {
@@ -572,15 +529,12 @@ async fn test_inactivity_recovery() {
             }],
         };
         ws_stream1
-            .send(Message::Text(
-                serde_json::to_string(&update_msg1).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&update_msg1).unwrap()))
             .await
             .unwrap();
 
         // Client 1 receives ACK
-        let ack_response1 =
-            crate::tests::next_message_with_timeout(&mut ws_stream1, 5, "Update ack").await;
+        let ack_response1 = next_message_with_timeout(&mut ws_stream1, 5, "Update ack").await;
         let ack_result1: ServerMessage =
             serde_json::from_str(ack_response1.to_text().unwrap()).unwrap();
         assert!(matches!(ack_result1, ServerMessage::UpdateAck { .. }));
@@ -592,7 +546,7 @@ async fn test_inactivity_recovery() {
         // 2. Then testing the recovery mechanism works when a client reconnects
 
         // Close the connection safely
-        crate::tests::safe_close_connection(&mut ws_stream1).await;
+        safe_close_connection(&mut ws_stream1).await;
 
         // Small delay to ensure connection closure is processed
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -608,14 +562,11 @@ async fn test_inactivity_recovery() {
             priority: 5,
         };
         ws_stream2
-            .send(Message::Text(
-                serde_json::to_string(&join_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&join_msg).unwrap()))
             .await
             .unwrap();
 
-        let join_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream2, 5, "Join meet").await;
+        let join_response = next_message_with_timeout(&mut ws_stream2, 5, "Join meet").await;
         let join_result: ServerMessage =
             serde_json::from_str(join_response.to_text().unwrap()).unwrap();
         let ServerMessage::MeetJoined {
@@ -633,14 +584,11 @@ async fn test_inactivity_recovery() {
             last_server_seq: 0, // Pull all updates
         };
         ws_stream2
-            .send(Message::Text(
-                serde_json::to_string(&pull_msg).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&pull_msg).unwrap()))
             .await
             .unwrap();
 
-        let pull_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream2, 5, "Client pull").await;
+        let pull_response = next_message_with_timeout(&mut ws_stream2, 5, "Client pull").await;
         let pull_result: ServerMessage =
             serde_json::from_str(pull_response.to_text().unwrap()).unwrap();
 
@@ -687,15 +635,12 @@ async fn test_inactivity_recovery() {
             }],
         };
         ws_stream2
-            .send(Message::Text(
-                serde_json::to_string(&update_msg2).unwrap().into(),
-            ))
+            .send(Message::Text(serde_json::to_string(&update_msg2).unwrap()))
             .await
             .unwrap();
 
         // Client 2 should receive ACK if everything is working properly
-        let final_response =
-            crate::tests::next_message_with_timeout(&mut ws_stream2, 5, "Final update").await;
+        let final_response = next_message_with_timeout(&mut ws_stream2, 5, "Final update").await;
         let final_result: ServerMessage =
             serde_json::from_str(final_response.to_text().unwrap()).unwrap();
 
@@ -712,7 +657,7 @@ async fn test_inactivity_recovery() {
         }
 
         // Close connection safely
-        crate::tests::safe_close_connection(&mut ws_stream2).await;
+        safe_close_connection(&mut ws_stream2).await;
     };
 
     // Run with overall timeout
@@ -720,114 +665,5 @@ async fn test_inactivity_recovery() {
     match tokio::time::timeout(Duration::from_secs(15), test_future).await {
         Ok(()) => println!("Test completed successfully"),
         Err(e) => panic!("Test timed out after 15 seconds: {e:?}"),
-    }
-}
-
-#[cfg(test)]
-pub mod tests {
-    use backend_lib::storage::FlatFileStorage;
-    use backend_lib::ws_router::create_router;
-    use backend_lib::AppState;
-    use futures_util::{SinkExt, StreamExt};
-    use rand;
-    use std::fmt::Debug;
-    use std::sync::Arc;
-    use tempfile::TempDir;
-    use tokio::time::Duration;
-    use tokio_tungstenite::tungstenite::Message;
-
-    // Add a helper function to generate unique meet IDs
-    pub fn unique_meet_id(prefix: &str) -> String {
-        format!(
-            "{}-{}-{}",
-            prefix,
-            std::process::id(),
-            rand::random::<u16>()
-        )
-    }
-
-    // Add allow attribute to the next_message_with_timeout function
-    #[allow(clippy::match_wild_err_arm)]
-    pub async fn next_message_with_timeout<S>(
-        stream: &mut S,
-        timeout_secs: u64,
-        operation_name: &str,
-    ) -> Message
-    where
-        S: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-    {
-        match tokio::time::timeout(Duration::from_secs(timeout_secs), stream.next()).await {
-            Ok(Some(Ok(msg))) => msg,
-            Ok(Some(Err(e))) => panic!("{operation_name} failed with error: {e:?}"),
-            Ok(None) => panic!("{operation_name} returned None (connection closed?)"),
-            Err(e) => panic!("{operation_name} timed out after {timeout_secs} seconds: {e:?}"),
-        }
-    }
-
-    // Add a safe close_connection helper
-    pub async fn safe_close_connection<S>(stream: &mut S)
-    where
-        S: SinkExt<Message> + Unpin,
-        <S as futures_util::Sink<Message>>::Error: Debug,
-    {
-        // Try to close gracefully with a timeout
-        match tokio::time::timeout(
-            Duration::from_secs(2),
-            stream.close(), // This should be just close() without arguments
-        )
-        .await
-        {
-            Ok(result) => {
-                if let Err(e) = result {
-                    println!("Warning: Error closing WebSocket connection: {e:?}");
-                }
-            },
-            Err(_) => println!("Warning: Timeout when closing WebSocket connection"),
-        }
-    }
-
-    // Helper to set up a test environment with a running server
-    pub async fn setup_server() -> (
-        String,                         // Server address
-        Arc<AppState<FlatFileStorage>>, // App state
-        TempDir,                        // Temp directory
-    ) {
-        // Generate a random port number in the dynamic/private port range
-        let mut port = 10000 + rand::random::<u16>() % 50000;
-        let temp_dir = TempDir::new().unwrap();
-        let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
-        let settings = backend_lib::config::Settings::default();
-        let state = Arc::new(AppState::new(storage.clone(), &settings).await.unwrap());
-
-        // Create router
-        let app = create_router(state.clone());
-
-        // Try to bind to the random port, if it fails, retry with a different port
-        let mut listener = None;
-        let mut retry_count = 0;
-        let max_retries = 5;
-
-        while listener.is_none() && retry_count < max_retries {
-            if let Ok(l) = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await {
-                listener = Some(l);
-            } else {
-                // Try another random port
-                retry_count += 1;
-                port = 10000 + rand::random::<u16>() % 50000;
-            }
-        }
-
-        let listener = listener.expect("Failed to bind to any port after multiple attempts");
-        let addr = listener.local_addr().unwrap().to_string();
-
-        // Start server in background
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        // Short delay to ensure server is ready
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        (addr, state, temp_dir)
     }
 }

@@ -1,10 +1,8 @@
 /// Performance test for WebSocket message throughput
-///
 /// This test measures:
 /// 1. Messages per second
 /// 2. Latency for message round-trip
 /// 3. Performance under different load conditions
-///
 /// Run this test with:
 /// ```
 /// cargo test --release -- --ignored --nocapture performance::websocket_throughput

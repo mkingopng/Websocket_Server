@@ -139,7 +139,13 @@ impl Storage for FlatFileStorage {
             .join("updates.log");
 
         // ensure directory exists
-        tokio_fs::create_dir_all(path.parent().unwrap()).await?;
+        if let Some(parent) = path.parent() {
+            tokio_fs::create_dir_all(parent).await?;
+        } else {
+            return Err(AppError::Internal(
+                "Invalid path: no parent directory".to_string(),
+            ));
+        }
 
         let mut file = tokio_fs::OpenOptions::new()
             .create(true)

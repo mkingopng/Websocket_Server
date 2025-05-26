@@ -37,7 +37,7 @@ fn log_security_event(event: SecurityEvent, details: &str) {
         .format("%Y-%m-%d %H:%M:%S%.3f")
         .to_string();
     let event_str = format!("{:?}", event);
-    println!("[SECURITY] [{timestamp}] [{event_str}] {details}");
+    tracing::info!("[SECURITY] [{timestamp}] [{event_str}] {details}");
 }
 
 /// Session entry with enhanced security features
@@ -226,234 +226,221 @@ impl SessionManager {
 
     /// Get a session by token
     pub async fn get_session(&self, token: &str) -> Option<Session> {
-        // Acquire a write lock immediately to avoid read->write deadlock
-        let mut sessions = self.sessions.write().await;
+        let sessions = self.sessions.read().await;
+        let entry = sessions.get(token)?;
 
-        if let Some(entry) = sessions.get_mut(token) {
-            let now = Instant::now();
+        // Check if session has expired
+        let now = Instant::now();
+        let age = now.duration_since(entry.created_at);
+        let idle = now.duration_since(entry.last_active);
 
-            // Check both absolute and idle timeouts
-            if now.duration_since(entry.created_at) > self.absolute_ttl
-                || now.duration_since(entry.last_active) > self.idle_ttl
-            {
-                // Log session expiration
-                log_security_event(
-                    SecurityEvent::SessionExpired,
-                    &format!("Session expired for meet: {}", entry.session.meet_id),
-                );
-                return None;
-            }
-
-            // Update last active time (sliding window)
-            entry.last_active = now;
-
-            // Log successful session validation
+        if age > self.absolute_ttl || idle > self.idle_ttl {
+            // Session has expired
             log_security_event(
-                SecurityEvent::SessionValidated,
-                &format!("Session validated for meet: {}", entry.session.meet_id),
+                SecurityEvent::SessionExpired,
+                &format!(
+                    "Session expired for meet: {}, location: {}",
+                    entry.session.meet_id, entry.session.location_name
+                ),
             );
-
-            return Some(entry.session.clone());
+            return None;
         }
 
-        // Log invalid session access
-        log_security_event(
-            SecurityEvent::InvalidSessionAccess,
-            &format!("Attempted to get invalid session: {}", token),
-        );
+        // Clone session before dropping read lock
+        let session = entry.session.clone();
 
-        None
+        drop(sessions); // Release read lock
+        let mut sessions = self.sessions.write().await;
+        if let Some(entry) = sessions.get_mut(token) {
+            entry.last_active = now;
+            entry.last_active_duration = std::time::Duration::from_secs(0);
+        }
+
+        Some(session)
     }
 
-    /// Validate a session by token
+    /// Validate a session token
     pub async fn validate_session(&self, token: &str) -> bool {
-        // Acquire a write lock immediately instead of first reading then writing
-        let mut sessions = self.sessions.write().await;
-
-        if let Some(entry) = sessions.get_mut(token) {
-            let now = Instant::now();
-
-            // Check both absolute and idle timeouts
-            if now.duration_since(entry.created_at) > self.absolute_ttl
-                || now.duration_since(entry.last_active) > self.idle_ttl
-            {
-                // Log session expiration
+        let sessions = self.sessions.read().await;
+        let entry = match sessions.get(token) {
+            Some(entry) => entry,
+            None => {
                 log_security_event(
-                    SecurityEvent::SessionExpired,
-                    &format!("Session expired for meet: {}", entry.session.meet_id),
+                    SecurityEvent::InvalidSessionAccess,
+                    &format!("Invalid session token: {}", token),
                 );
                 return false;
-            }
-
-            // Update last active time (sliding window)
-            entry.last_active = now;
-
-            return true;
-        }
-
-        // Log invalid session access
-        log_security_event(
-            SecurityEvent::InvalidSessionAccess,
-            &format!("Attempted to validate invalid session: {}", token),
-        );
-
-        false
-    }
-
-    /// Remove a session by token
-    pub async fn remove_session(&self, token: &str) {
-        let meet_id = if let Some(entry) = self.sessions.read().await.get(token) {
-            entry.session.meet_id.clone()
-        } else {
-            "unknown".to_string()
+            },
         };
 
-        self.sessions.write().await.remove(token);
+        // Check if session has expired
+        let now = Instant::now();
+        let age = now.duration_since(entry.created_at);
+        let idle = now.duration_since(entry.last_active);
 
-        // Log session removal
-        log_security_event(
-            SecurityEvent::SessionRemoved,
-            &format!("Session removed for meet: {}", meet_id),
-        );
-    }
-
-    /// Rotate the session token for enhanced security
-    /// This should be called after sensitive operations or privilege changes
-    pub async fn rotate_session(&self, old_token: &str) -> Option<String> {
-        let mut sessions = self.sessions.write().await;
-
-        if let Some(entry) = sessions.remove(old_token) {
-            // Create new tokens
-            let new_token = generate_secure_token();
-            let new_csrf_token = generate_secure_token();
-
-            // Create new session with the same data but new token
-            let new_session = Session {
-                token: new_token.clone(),
-                meet_id: entry.session.meet_id.clone(),
-                location_name: entry.session.location_name.clone(),
-                priority: entry.session.priority,
-            };
-
-            // Create new entry with updated fields
-            let now = Instant::now();
-            let new_entry = SessionEntry {
-                session: new_session.clone(),
-                created_at: entry.created_at, // Keep original creation time
-                last_active: now,             // Update activity time
-                csrf_token: new_csrf_token,
-                created_at_duration: std::time::Duration::from_secs(0),
-                last_active_duration: std::time::Duration::from_secs(0),
-            };
-
-            // Insert new session
-            sessions.insert(new_token.clone(), new_entry);
-
-            // Log session rotation
+        if age > self.absolute_ttl || idle > self.idle_ttl {
+            // Session has expired
             log_security_event(
-                SecurityEvent::SessionRotated,
-                &format!("Session rotated for meet: {}", entry.session.meet_id),
+                SecurityEvent::SessionExpired,
+                &format!(
+                    "Session expired for meet: {}, location: {}",
+                    entry.session.meet_id, entry.session.location_name
+                ),
             );
-
-            return Some(new_token);
+            return false;
         }
 
-        // Log invalid session access
+        // Clone session info before dropping read lock
+        let meet_id = entry.session.meet_id.clone();
+        let location_name = entry.session.location_name.clone();
+
+        drop(sessions); // Release read lock
+        let mut sessions = self.sessions.write().await;
+        if let Some(entry) = sessions.get_mut(token) {
+            entry.last_active = now;
+            entry.last_active_duration = std::time::Duration::from_secs(0);
+        }
+
         log_security_event(
-            SecurityEvent::InvalidSessionAccess,
-            &format!("Attempted to rotate invalid session: {}", old_token),
+            SecurityEvent::SessionValidated,
+            &format!(
+                "Session validated for meet: {}, location: {}",
+                meet_id, location_name
+            ),
         );
 
-        None
+        true
     }
 
-    /// Cleanup task that runs periodically to remove expired sessions
+    /// Remove a session
+    pub async fn remove_session(&self, token: &str) {
+        let mut sessions = self.sessions.write().await;
+        if let Some(entry) = sessions.remove(token) {
+            log_security_event(
+                SecurityEvent::SessionRemoved,
+                &format!(
+                    "Removed session for meet: {}, location: {}",
+                    entry.session.meet_id, entry.session.location_name
+                ),
+            );
+        }
+    }
+
+    /// Rotate a session token
+    pub async fn rotate_session(&self, old_token: &str) -> Option<String> {
+        let mut sessions = self.sessions.write().await;
+        let entry = sessions.remove(old_token)?;
+
+        // Generate new token
+        let new_token = generate_secure_token();
+        let new_csrf_token = generate_secure_token();
+
+        // Clone meet_id and location_name before moving
+        let meet_id = entry.session.meet_id.clone();
+        let location_name = entry.session.location_name.clone();
+
+        // Create new session entry
+        let now = Instant::now();
+        let new_entry = SessionEntry {
+            session: Session {
+                token: new_token.clone(),
+                meet_id,
+                location_name,
+                priority: entry.session.priority,
+            },
+            created_at: now,
+            last_active: now,
+            csrf_token: new_csrf_token,
+            created_at_duration: std::time::Duration::from_secs(0),
+            last_active_duration: std::time::Duration::from_secs(0),
+        };
+
+        // Store new session
+        sessions.insert(new_token.clone(), new_entry);
+
+        log_security_event(
+            SecurityEvent::SessionRotated,
+            &format!(
+                "Rotated session for meet: {}, location: {}",
+                entry.session.meet_id, entry.session.location_name
+            ),
+        );
+
+        Some(new_token)
+    }
+
+    /// Clean up expired sessions
     pub async fn cleanup_expired_sessions(&self) {
         let mut sessions = self.sessions.write().await;
         let now = Instant::now();
-        let mut expired_count = 0;
+        let mut expired = Vec::new();
 
-        // Remove all sessions that have expired (absolute or idle timeout)
-        sessions.retain(|_, entry| {
-            let absolute_expired = now.duration_since(entry.created_at) > self.absolute_ttl;
-            let idle_expired = now.duration_since(entry.last_active) > self.idle_ttl;
+        // Find expired sessions
+        for (token, entry) in sessions.iter() {
+            let age = now.duration_since(entry.created_at);
+            let idle = now.duration_since(entry.last_active);
 
-            let retain = !absolute_expired && !idle_expired;
-            if !retain {
-                expired_count += 1;
+            if age > self.absolute_ttl || idle > self.idle_ttl {
+                expired.push(token.clone());
             }
+        }
 
-            retain
-        });
+        // Remove expired sessions
+        for token in expired {
+            if let Some(entry) = sessions.remove(&token) {
+                log_security_event(
+                    SecurityEvent::SessionExpired,
+                    &format!(
+                        "Cleaned up expired session for meet: {}, location: {}",
+                        entry.session.meet_id, entry.session.location_name
+                    ),
+                );
+            }
+        }
+    }
 
-        // Log the number of active sessions after cleanup
-        println!(
-            "Session cleanup complete: {} sessions expired, {} active sessions remain",
-            expired_count,
-            sessions.len()
-        );
+    /// Verify CSRF token
+    pub async fn verify_csrf_token(&self, session_token: &str, csrf_token: &str) -> bool {
+        let sessions = self.sessions.read().await;
+        let entry = match sessions.get(session_token) {
+            Some(entry) => entry,
+            None => {
+                log_security_event(
+                    SecurityEvent::CsrfValidationFailed,
+                    &format!("Invalid session token: {}", session_token),
+                );
+                return false;
+            },
+        };
+
+        // Use constant-time comparison
+        let valid = constant_time_compare(&entry.csrf_token, csrf_token);
+
+        if valid {
+            log_security_event(
+                SecurityEvent::CsrfValidationSuccess,
+                &format!(
+                    "CSRF validation successful for meet: {}, location: {}",
+                    entry.session.meet_id, entry.session.location_name
+                ),
+            );
+        } else {
+            log_security_event(
+                SecurityEvent::CsrfValidationFailed,
+                &format!(
+                    "CSRF validation failed for meet: {}, location: {}",
+                    entry.session.meet_id, entry.session.location_name
+                ),
+            );
+        }
+
+        valid
     }
 
     /// Return count of active sessions
     pub async fn active_session_count(&self) -> usize {
         let sessions = self.sessions.read().await;
         sessions.len()
-    }
-
-    /// Verify a CSRF token for a session
-    pub async fn verify_csrf_token(&self, session_token: &str, csrf_token: &str) -> bool {
-        // Acquire a write lock immediately to avoid read->write deadlock
-        let mut sessions = self.sessions.write().await;
-
-        if let Some(entry) = sessions.get_mut(session_token) {
-            // Check if session is valid first
-            let now = Instant::now();
-            if now.duration_since(entry.created_at) > self.absolute_ttl
-                || now.duration_since(entry.last_active) > self.idle_ttl
-            {
-                log_security_event(
-                    SecurityEvent::SessionExpired,
-                    &format!(
-                        "Session expired during CSRF validation for meet: {}",
-                        entry.session.meet_id
-                    ),
-                );
-                return false;
-            }
-
-            // Update last active time
-            entry.last_active = now;
-
-            // Verify CSRF token with constant-time comparison to prevent timing attacks
-            let is_valid = constant_time_compare(&entry.csrf_token, csrf_token);
-
-            if is_valid {
-                log_security_event(
-                    SecurityEvent::CsrfValidationSuccess,
-                    &format!("CSRF token validated for meet: {}", entry.session.meet_id),
-                );
-            } else {
-                log_security_event(
-                    SecurityEvent::CsrfValidationFailed,
-                    &format!(
-                        "CSRF token validation failed for meet: {}",
-                        entry.session.meet_id
-                    ),
-                );
-            }
-
-            return is_valid;
-        }
-
-        log_security_event(
-            SecurityEvent::InvalidSessionAccess,
-            &format!(
-                "Attempted to verify CSRF token for invalid session: {}",
-                session_token
-            ),
-        );
-
-        false
     }
 }
 

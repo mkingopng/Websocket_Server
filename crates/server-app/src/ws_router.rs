@@ -78,7 +78,7 @@ async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
     // Get current time
     let current_time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
+        .map_err(|e| AppError::Internal(format!("Failed to get current time: {}", e)))?
         .as_secs();
 
     // Check the last activity time for this meet (if available)
@@ -93,7 +93,7 @@ async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
 
         // If last activity was more than 5 minutes ago, initiate recovery
         if current_time - *entry > 300 {
-            println!(
+            tracing::warn!(
                 "Long inactivity detected for meet {meet_id}: {} seconds since last activity",
                 current_time - *entry
             );
@@ -107,10 +107,10 @@ async fn check_state_consistency<S: Storage + Send + Sync + Clone + 'static>(
 
     if needs_recovery {
         // Initiate recovery with the last known sequence 0
-        // Convert anyhow::Error to AppError
-        if let Err(e) = handler.initiate_state_recovery(meet_id, 0).await {
-            return Err(AppError::Internal(e.to_string()));
-        }
+        handler
+            .initiate_state_recovery(meet_id, 0)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to initiate state recovery: {}", e)))?;
     }
 
     Ok(())
@@ -144,8 +144,8 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
             match serde_json::to_string(&msg) {
                 Ok(json) => {
                     tracing::debug!("Sending message to client: {}", json);
-                    if sender.send(Message::Text(json.into())).await.is_err() {
-                        tracing::error!("Failed to send message to client");
+                    if let Err(e) = sender.send(Message::Text(json.into())).await {
+                        tracing::error!("Failed to send message to client: {}", e);
                         break;
                     }
                 },
@@ -183,11 +183,7 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
                         if let Some(ref meet_id) = meet_id {
                             // Always clone (first time) or clone_from (subsequent times)
                             if connected_meet_id.is_empty() {
-                                #[allow(clippy::assigning_clones)]
-                                {
-                                    // First assignment needs clone
-                                    connected_meet_id = meet_id.clone();
-                                }
+                                connected_meet_id = meet_id.clone();
                             } else {
                                 connected_meet_id.clone_from(meet_id);
                             }
@@ -199,7 +195,8 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
                                     if let Err(e) =
                                         check_state_consistency(&mut handler, meet_id).await
                                     {
-                                        tracing::error!("Error checking state consistency: {}", e);
+                                        tracing::error!("State consistency check failed: {}", e);
+                                        // Continue processing the message even if consistency check fails
                                     }
                                 },
                                 _ => {},
@@ -209,93 +206,64 @@ async fn handle_socket<S: Storage + Send + Sync + Clone + 'static>(
                         // Process the message
                         match handler.handle_message(client_msg).await {
                             Ok(response) => {
-                                tracing::debug!("Handler produced response: {:?}", response);
                                 if tx.send(response).await.is_err() {
-                                    tracing::error!("Failed to send response through channel");
+                                    tracing::error!("Failed to send response to client");
                                     break;
                                 }
                             },
                             Err(e) => {
                                 tracing::error!("Error handling message: {}", e);
-                                if let Err(send_err) = tx
+                                if tx
                                     .send(ServerMessage::Error {
-                                        code: "HANDLER_ERROR".to_string(),
-                                        message: format!("Error processing request: {}", e),
+                                        code: "INTERNAL_ERROR".to_string(),
+                                        message: e.to_string(),
                                     })
                                     .await
+                                    .is_err()
                                 {
-                                    tracing::error!("Failed to send error message: {}", send_err);
                                     break;
                                 }
                             },
                         }
                     },
                     Err(e) => {
-                        // Malformed message - log the parse error and the text that failed to parse
                         tracing::error!("Failed to parse message: {}", e);
-                        tracing::error!("Problematic message text: '{}'", text);
-
-                        // Try to determine if it's a JSON format issue or a different problem
-                        match serde_json::from_str::<serde_json::Value>(&text) {
-                            Ok(value) => {
-                                tracing::error!("Message is valid JSON but doesn't match ClientMessage structure: {:?}", value);
-
-                                // Check if the 'type' field is present
-                                if let Some(msg_type) = value.get("type").and_then(|t| t.as_str()) {
-                                    tracing::error!(
-                                        "Message type '{}' found, but structure is incorrect",
-                                        msg_type
-                                    );
-                                } else {
-                                    tracing::error!("No 'type' field found in message");
-                                }
-                            },
-                            Err(json_err) => {
-                                tracing::error!("Message is not valid JSON: {}", json_err);
-                            },
-                        }
-
-                        if let Err(send_err) = tx
-                            .send(ServerMessage::MalformedMessage {
-                                err_msg: format!("Invalid message format: {}", e),
+                        if tx
+                            .send(ServerMessage::Error {
+                                code: "PARSE_ERROR".to_string(),
+                                message: e.to_string(),
                             })
                             .await
+                            .is_err()
                         {
-                            tracing::error!(
-                                "Failed to send malformed message response: {}",
-                                send_err
-                            );
                             break;
                         }
                     },
                 }
             },
             Ok(axum::extract::ws::Message::Close(_)) => {
-                tracing::debug!("Client disconnected: {}", addr);
+                tracing::debug!("WebSocket connection closed by client");
                 break;
-            },
-            Ok(_) => {
-                // Ignore other message types
             },
             Err(e) => {
                 tracing::error!("WebSocket error: {}", e);
                 break;
             },
+            _ => {},
         }
     }
 
-    // When the connection is closed, unregister the client
+    // Clean up
     if !connected_meet_id.is_empty() {
-        tracing::debug!("Unregistering client for meet: {}", connected_meet_id);
         handler.unregister_client(&connected_meet_id);
     }
 
-    // Wait for the send task to complete
-    _ = send_task.await;
-
     // Update metrics
-    let _ = gauge!("ws.active", &[("value", "-1")]);
-    tracing::debug!("WebSocket connection closed: {}", addr);
+    let _ = gauge!("ws.active", &[("value", "0")]);
+    let _ = counter!("ws.disconnection", &[("value", "1")]);
+
+    // Wait for the send task to complete
+    let _ = send_task.await;
 }
 
 #[cfg(test)]
@@ -469,7 +437,7 @@ mod tests {
 
             // Register a client channel
             let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
-            handler.register_client("workflow-test", tx);
+            let _ = handler.register_client("workflow-test", tx);
 
             // Send an update
             let update_result = handler

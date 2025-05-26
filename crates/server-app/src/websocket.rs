@@ -73,19 +73,23 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     }
 
     // Register this client for a specific meet
-    pub fn register_client(&mut self, meet_id: &str, tx: mpsc::Sender<ServerMessage>) {
+    pub fn register_client(
+        &mut self,
+        meet_id: &str,
+        tx: mpsc::Sender<ServerMessage>,
+    ) -> Result<()> {
         // Store the client's transmission channel
         self.client_tx = Some(tx.clone());
 
         // Add client to the clients map for the meet
         let mut meet_clients = self.state.clients.entry(meet_id.to_string()).or_default();
-
         meet_clients.push(tx);
 
-        println!("Client {} registered for meet {}", self.client_id, meet_id);
+        info!("Client {} registered for meet {}", self.client_id, meet_id);
 
         // Reset reconnect attempts on successful registration
         self.reconnect_attempts = 0;
+        Ok(())
     }
 
     // Set priority for this client
@@ -99,7 +103,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             if let Some(mut clients) = self.state.clients.get_mut(meet_id) {
                 // Remove this client from the list
                 clients.retain(|tx| !std::ptr::eq(tx, client_tx));
-                println!(
+                info!(
                     "Client {} unregistered from meet {}",
                     self.client_id, meet_id
                 );
@@ -132,7 +136,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     }
 
                     // Log the error
-                    println!("Error sending message, attempt {attempts}/{max_attempts}: {e}");
+                    error!("Error sending message, attempt {attempts}/{max_attempts}: {e}");
 
                     // Wait before retrying with exponential backoff
                     time::sleep(Duration::from_millis(delay)).await;
@@ -151,66 +155,53 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     #[allow(dead_code)]
     async fn broadcast_update(&self, meet_id: &str, updates: Vec<Update>) -> Result<()> {
         // Check if we have clients for this meet
-        if let Some(clients) = self.state.clients.get(meet_id) {
-            if clients.is_empty() {
-                // No other clients to broadcast to
-                return Ok(());
+        let clients = match self.state.clients.get(meet_id) {
+            Some(clients) if !clients.is_empty() => clients,
+            _ => return Ok(()), // No clients to broadcast to
+        };
+
+        // Create metadata for each update
+        let updates_with_metadata: Vec<UpdateWithMetadata> = updates
+            .into_iter()
+            .enumerate()
+            .map(|(idx, update)| UpdateWithMetadata {
+                update,
+                source_client: self.client_id.clone(),
+                server_seq: idx as u64,
+                priority: self.client_priority,
+            })
+            .collect();
+
+        // Create the relay message
+        let relay_msg = ServerMessage::UpdateRelay {
+            meet_id: meet_id.to_string(),
+            updates: updates_with_metadata,
+        };
+
+        // Use a JoinSet to send to all clients concurrently for better performance
+        let mut send_tasks = tokio::task::JoinSet::new();
+        let self_tx = self.client_tx.as_ref();
+
+        for client in clients.iter() {
+            // Skip sending to ourselves
+            if self_tx.is_none_or(|tx| !std::ptr::eq(tx, client)) {
+                let client_clone = client.clone();
+                let relay_msg_clone = relay_msg.clone();
+
+                // Add a task for each client
+                send_tasks.spawn(async move {
+                    client_clone
+                        .send(relay_msg_clone)
+                        .await
+                        .map_err(|e| anyhow!("Failed to send to client: {}", e))
+                });
             }
+        }
 
-            // Create metadata for each update
-            let updates_with_metadata: Vec<UpdateWithMetadata> = updates
-                .into_iter()
-                .enumerate()
-                .map(|(idx, update)| {
-                    UpdateWithMetadata {
-                        update,
-                        source_client: self.client_id.clone(),
-                        server_seq: idx as u64,
-                        priority: self.client_priority, // Use client's priority setting
-                    }
-                })
-                .collect();
-
-            // Create the relay message
-            let relay_msg = ServerMessage::UpdateRelay {
-                meet_id: meet_id.to_string(),
-                updates: updates_with_metadata,
-            };
-
-            // Use a JoinSet to send to all clients concurrently for better performance
-            let mut send_tasks = tokio::task::JoinSet::new();
-            let self_tx = self.client_tx.as_ref();
-
-            for client in clients.iter() {
-                // Skip sending to ourselves
-                if self_tx.is_none_or(|tx| !std::ptr::eq(tx, client)) {
-                    let client_clone = client.clone();
-                    let relay_msg_clone = relay_msg.clone();
-
-                    // Add a task for each client
-                    send_tasks.spawn(async move {
-                        if let Err(e) = client_clone.send(relay_msg_clone).await {
-                            // Return the error to track failures
-                            Err(anyhow!("Failed to send to client: {}", e))
-                        } else {
-                            Ok(())
-                        }
-                    });
-                }
-            }
-
-            // Wait for all send tasks to complete and track failures
-            let mut failed_clients = 0;
-            while let Some(result) = send_tasks.join_next().await {
-                match result {
-                    Ok(Ok(())) => {},                           // Successfully sent
-                    Ok(Err(_)) | Err(_) => failed_clients += 1, // Send failed or task failed
-                }
-            }
-
-            // Log if many clients failed to receive the update
-            if failed_clients > 0 {
-                println!("Warning: {failed_clients} clients failed to receive update");
+        // Wait for all sends to complete
+        while let Some(result) = send_tasks.join_next().await {
+            if let Err(e) = result {
+                error!("Task error during broadcast: {}", e);
             }
         }
 
@@ -244,7 +235,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 let highest_priority = location_updates
                     .iter()
                     .max_by_key(|update| update.priority)
-                    .unwrap();
+                    .expect("Location updates should not be empty");
 
                 resolved_updates.push((*highest_priority).clone());
             }
@@ -262,7 +253,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         self.reconnect_attempts += 1;
 
         // Log reconnection attempt
-        println!(
+        info!(
             "Attempting to reconnect client {} to meet {} (attempt {}/{})",
             self.client_id, meet_id, self.reconnect_attempts, MAX_RECONNECT_ATTEMPTS
         );
@@ -278,7 +269,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
 
         if session_valid {
             // Session is still valid - we can recover
-            println!(
+            info!(
                 "Reconnection successful for client {} to meet {}",
                 self.client_id, meet_id
             );
@@ -333,7 +324,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             });
         }
 
-        println!(
+        info!(
             "Processing state recovery response from client {} with {} updates",
             self.client_id,
             updates.len()
@@ -739,13 +730,21 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     // Create openlifter_common::Update from our messages::Update
                     let ol_updates = valid_updates
                         .iter()
-                        .map(|u| openlifter_common::Update {
-                            update_key: u.location.clone(),
-                            update_value: serde_json::from_str(&u.value)
-                                .unwrap_or(serde_json::Value::Null),
-                            #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-                            local_seq_num: u.timestamp as u64, // Use timestamp as sequence number
-                            after_server_seq_num: 0, // Default to 0
+                        .map(|u| {
+                            let value = match serde_json::from_str(&u.value) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    error!("Failed to parse update value as JSON: {}", e);
+                                    serde_json::Value::Null
+                                },
+                            };
+                            openlifter_common::Update {
+                                update_key: u.location.clone(),
+                                update_value: value,
+                                #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+                                local_seq_num: u.timestamp as u64, // Use timestamp as sequence number
+                                after_server_seq_num: 0, // Default to 0
+                            }
                         })
                         .collect();
 
@@ -756,7 +755,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                         Ok(update_acks) => {
                             // Register client for this meet if not already
                             if let Some(tx) = &self.client_tx {
-                                self.register_client(&meet_id, tx.clone());
+                                let _ = self.register_client(&meet_id, tx.clone());
                             }
 
                             // Convert to a format expected by UpdateAck
@@ -776,7 +775,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                             } = e
                             {
                                 // Automatically initiate state recovery
-                                println!(
+                                info!(
                                     "State recovery needed for meet {meet_id}: last_known_seq={last_known_seq}"
                                 );
 
@@ -886,7 +885,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
 
                         // Register client for this meet if not already
                         if let Some(tx) = &self.client_tx {
-                            self.register_client(&meet_id, tx.clone());
+                            let _ = self.register_client(&meet_id, tx.clone());
                         }
 
                         // Return updates
@@ -1108,7 +1107,7 @@ mod tests {
         let meet_id = "test-meet";
 
         // Register client
-        handler.register_client(meet_id, tx.clone());
+        let _ = handler.register_client(meet_id, tx.clone());
 
         // Verify client is in the meet clients map
         assert!(state.clients.contains_key(meet_id));
@@ -1122,7 +1121,7 @@ mod tests {
         let meet_id = "test-meet";
 
         // Register client first
-        handler.register_client(meet_id, tx);
+        let _ = handler.register_client(meet_id, tx);
 
         // Verify client is registered
         assert!(state.clients.contains_key(meet_id));
@@ -1199,7 +1198,7 @@ mod tests {
             let (tx, _rx) = mpsc::channel::<ServerMessage>(10);
 
             // Register the client
-            handler.register_client("test-meet", tx);
+            let _ = handler.register_client("test-meet", tx);
 
             // Create a session token
             let session = state

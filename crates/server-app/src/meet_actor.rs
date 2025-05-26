@@ -47,17 +47,17 @@ pub struct MeetHandle {
 }
 
 impl MeetHandle {
-    pub fn new(meet_id: String) -> Self {
+    pub fn new(meet_id: String) -> Result<Self, AppError> {
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let (relay_tx, _) = broadcast::channel(100);
 
         let storage = crate::storage::FlatFileStorage::new("server-storage")
-            .expect("Failed to initialize storage");
+            .map_err(|e| AppError::Internal(format!("Failed to initialize storage: {}", e)))?;
         let actor = MeetActor::new(meet_id, storage, relay_tx.clone());
 
         tokio::spawn(actor.run(cmd_rx));
 
-        MeetHandle { cmd_tx, relay_tx }
+        Ok(MeetHandle { cmd_tx, relay_tx })
     }
 
     pub async fn apply_updates(
@@ -170,10 +170,8 @@ impl<S: Storage> MeetActor<S> {
     }
 
     /// Detect sequence gaps in client updates
-    ///
     /// This method checks if there are any gaps in the sequence numbers
     /// from a specific client, which might indicate lost updates.
-    ///
     /// Returns true if a gap is detected, false otherwise.
     pub fn detect_sequence_gaps(&mut self, client_id: &str, updates: &[Update]) -> bool {
         if updates.is_empty() {
@@ -228,20 +226,19 @@ impl<S: Storage> MeetActor<S> {
         }
 
         // Update the expected next sequence number for this client
-        let last_update = updates.last().unwrap();
-        self.expected_client_seq
-            .insert(client_id.to_string(), last_update.local_seq_num + 1);
+        if let Some(last_update) = updates.last() {
+            self.expected_client_seq
+                .insert(client_id.to_string(), last_update.local_seq_num + 1);
+        }
 
         false
     }
 
     /// Check if state recovery is needed
-    ///
     /// Determines if we should initiate state recovery based on:
     /// 1. Gap detection in sequence numbers
     /// 2. Long periods of inactivity
     /// 3. Explicitly set `need_consistency_check` flag
-    ///
     /// Returns true if recovery is needed, false otherwise.
     pub fn needs_state_recovery(&mut self) -> bool {
         // If we've already determined we need a consistency check
@@ -364,7 +361,6 @@ impl<S: Storage> MeetActor<S> {
     }
 
     /// Process client updates for state recovery
-    ///
     /// This method is used when the server needs to recover its state from client updates.
     /// It applies updates with proper sequence numbering and conflict resolution.
     pub async fn handle_state_recovery(

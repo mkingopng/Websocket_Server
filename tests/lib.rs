@@ -1,5 +1,7 @@
+// ============
+// tests/lib.rs
+// ============
 //! WebSocket Server Test Suite
-//!
 //! This crate contains tests for the WebSocket Server.
 
 // Common test utilities - export for use in all test modules
@@ -23,6 +25,7 @@ mod unit {
 mod integration {
     // Integration tests
     mod auth_flow_tests;
+    mod websocket_flow_tests;
 }
 
 #[cfg(test)]

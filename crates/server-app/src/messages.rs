@@ -159,7 +159,7 @@ mod tests {
     use serde_json;
 
     #[test]
-    fn test_client_message_serialization() {
+    fn test_client_message_serialization() -> Result<(), Box<dyn std::error::Error>> {
         // Test CreateMeet message
         let create_meet = ClientMessage::CreateMeet {
             meet_id: "test-meet".to_string(),
@@ -168,11 +168,11 @@ mod tests {
             priority: 10,
         };
 
-        let json = serde_json::to_string_pretty(&create_meet).unwrap();
+        let json = serde_json::to_string_pretty(&create_meet)?;
         println!("CreateMeet serialized: {}", json);
 
         // Verify the structure
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json)?;
         assert_eq!(parsed["msgType"], "CreateMeet");
         assert_eq!(parsed["meet_id"], "test-meet");
         assert_eq!(parsed["password"], "TestPassword123!");
@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(parsed["priority"], 10);
 
         // Test parsing from JSON
-        let parsed_msg: ClientMessage = serde_json::from_str(&json).unwrap();
+        let parsed_msg: ClientMessage = serde_json::from_str(&json)?;
         match parsed_msg {
             ClientMessage::CreateMeet {
                 meet_id,
@@ -193,7 +193,9 @@ mod tests {
                 assert_eq!(location_name, "Test Location");
                 assert_eq!(priority, 10);
             },
-            _ => panic!("Wrong variant"),
+            _ => return Err("Wrong variant".into()),
         }
+
+        Ok(())
     }
 }

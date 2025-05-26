@@ -1,6 +1,6 @@
-// =============
+// =============================
 // tests/unit/ws_router_tests.rs
-// =============
+// =============================
 //! This test suite is designed to validate the functionality of the `WebSocketHandler`
 use backend_lib::config::Settings;
 use backend_lib::messages::ServerMessage;
@@ -53,8 +53,8 @@ async fn test_client_registration() {
     let meet_id1 = "test-meet-1";
     let meet_id2 = "test-meet-2";
 
-    handler.register_client(meet_id1, tx1);
-    handler.register_client(meet_id2, tx2);
+    let _ = handler.register_client(meet_id1, tx1);
+    let _ = handler.register_client(meet_id2, tx2);
 
     // Verify clients are registered
     assert!(state.clients.contains_key(meet_id1));
@@ -72,7 +72,7 @@ async fn test_client_unregistration() {
     let meet_id = "test-meet-unreg";
 
     // Register the client
-    handler.register_client(meet_id, tx);
+    let _ = handler.register_client(meet_id, tx);
 
     // Verify registration
     assert!(state.clients.contains_key(meet_id));
@@ -98,14 +98,14 @@ async fn test_multiple_clients_for_one_meet() {
 
     // Register all clients for the same meet
     let meet_id = "multi-client-meet";
-    handler.register_client(meet_id, tx1);
+    let _ = handler.register_client(meet_id, tx1);
 
     // Create new handlers with the same state to simulate multiple connections
     let mut handler2 = WebSocketHandler::new(state.clone());
-    handler2.register_client(meet_id, tx2);
+    let _ = handler2.register_client(meet_id, tx2);
 
     let mut handler3 = WebSocketHandler::new(state.clone());
-    handler3.register_client(meet_id, tx3);
+    let _ = handler3.register_client(meet_id, tx3);
 
     // Verify all clients are registered for the meet
     assert_eq!(state.clients.get(meet_id).unwrap().len(), 3);

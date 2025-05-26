@@ -3,10 +3,12 @@
 // ============================
 //! Message validation module.
 use crate::messages::{ClientMessage, Update};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
-use std::sync::{LazyLock, RwLock};
+use std::sync::RwLock;
 use thiserror::Error;
+use tracing;
 
 // Common validation constants
 const MIN_MEET_ID_LENGTH: usize = 3;
@@ -17,15 +19,19 @@ const MAX_LOCATION_NAME_LENGTH: usize = 100;
 const MAX_EMAIL_LENGTH: usize = 254; // RFC 5321 SMTP limit
 
 // Regex patterns for validation
-static MEET_ID_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9-]+$").unwrap());
-static EMAIL_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap());
-static LOCATION_NAME_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[^<>/\\{}()\[\];]*$").unwrap());
+static MEET_ID_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9-]+$").expect("Invalid meet ID regex pattern"));
+
+static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+        .expect("Invalid email regex pattern")
+});
+
+static LOCATION_NAME_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[^<>/\\{}()\[\];]*$").expect("Invalid location name regex pattern"));
 
 /// Track meet IDs to ensure uniqueness (this will need to be replaced with actual storage)
-static MEET_IDS: LazyLock<RwLock<HashMap<String, bool>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+static MEET_IDS: Lazy<RwLock<HashMap<String, bool>>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Possible validation errors
 #[derive(Error, Debug)]
@@ -65,13 +71,25 @@ pub fn is_meet_id_unique(meet_id: &str) -> bool {
         return true;
     }
 
-    let ids = MEET_IDS.read().unwrap();
+    let ids = match MEET_IDS.read() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::error!("MEET_IDS lock poisoned in is_meet_id_unique");
+            poisoned.into_inner()
+        },
+    };
     !ids.contains_key(meet_id)
 }
 
 /// Register a meet ID as used
 pub fn register_meet_id(meet_id: &str) {
-    let mut ids = MEET_IDS.write().unwrap();
+    let mut ids = match MEET_IDS.write() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::error!("MEET_IDS lock poisoned in register_meet_id");
+            poisoned.into_inner()
+        },
+    };
     ids.insert(meet_id.to_string(), true);
 }
 
@@ -136,7 +154,7 @@ pub fn validate_password(password: &str) -> ValidationResult<&str> {
 
     // Recommend but don't require special character
     if !has_special {
-        println!("Warning: Password would be stronger with special characters");
+        tracing::warn!("Password would be stronger with special characters");
     }
 
     Ok(password)
