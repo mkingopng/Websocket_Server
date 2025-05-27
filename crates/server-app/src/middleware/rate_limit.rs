@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Rate limiter middleware
-pub async fn rate_limit<S: Storage + Send + Sync + 'static>(
+pub async fn rate_limit<S: Storage + Send + Sync + Clone + 'static>(
     State(state): State<Arc<AppState<S>>>,
     request: Request<axum::body::Body>,
     next: Next,
@@ -79,7 +79,7 @@ impl RateLimiter {
     }
 }
 
-pub fn check_rate_limit<S: Storage + Send + Sync + 'static>(
+pub fn check_rate_limit<S: Storage + Send + Sync + Clone + 'static>(
     state: &Arc<AppState<S>>,
     client_ip: &str,
 ) -> Result<(), AppError> {
@@ -89,6 +89,6 @@ pub fn check_rate_limit<S: Storage + Send + Sync + 'static>(
     Ok(())
 }
 
-pub fn init_rate_limiter<S: Storage + Send + Sync + 'static>(state: &mut AppState<S>) {
+pub fn init_rate_limiter<S: Storage + Send + Sync + Clone + 'static>(state: &mut AppState<S>) {
     state.rate_limiter = Arc::new(RateLimiter::new(Duration::from_secs(60), 100));
 }

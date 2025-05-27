@@ -85,36 +85,39 @@ pub fn load_settings() -> Result<Settings> {
     Ok(Settings::load()?)
 }
 
-// Default values
-#[allow(dead_code)]
-fn default_port() -> u16 {
-    3000
+// Default implementations using proper Default trait instead of dead functions
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+        }
+    }
 }
 
-#[allow(dead_code)]
-fn default_data_dir() -> PathBuf {
-    PathBuf::from("server-storage")
+impl Default for StorageSettings {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::from("server-storage"),
+        }
+    }
 }
 
-#[allow(dead_code)]
-fn default_rate_limit() -> RateLimitSettings {
-    RateLimitSettings {
-        max_requests: 100,
-        window_secs: 60,
+impl Default for RateLimitSettings {
+    fn default() -> Self {
+        Self {
+            max_requests: 100,
+            window_secs: 60,
+        }
     }
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            server: ServerSettings {
-                port: 8080,
-                host: "127.0.0.1".to_string(),
-            },
-            storage: StorageSettings {
-                path: PathBuf::from("server-storage"),
-            },
-            rate_limit: default_rate_limit(),
+            server: ServerSettings::default(),
+            storage: StorageSettings::default(),
+            rate_limit: RateLimitSettings::default(),
         }
     }
 }
@@ -154,26 +157,26 @@ mod config_tests {
                 host: "127.0.0.1".to_string(),
                 port: 3000,
             },
-            storage: StorageSettings {
-                path: default_data_dir(),
-            },
-            rate_limit: default_rate_limit(),
+            storage: StorageSettings::default(),
+            rate_limit: RateLimitSettings::default(),
         }
     }
 
     #[test]
     fn test_default_config() {
         let config = create_test_config();
-        assert_eq!(config.server.port, default_port());
-        assert_eq!(config.storage.path, default_data_dir());
-        assert_eq!(config.rate_limit, default_rate_limit());
+        let default_config = Settings::default();
+
+        assert_eq!(config.server.port, 3000); // Test config has port 3000
+        assert_eq!(config.storage.path, default_config.storage.path);
+        assert_eq!(config.rate_limit, default_config.rate_limit);
     }
 
     /// Test settings validation with various configurations
     #[test]
     fn test_settings_configurations() {
         let test_cases = [
-            ("default", "127.0.0.1", 8080, "server-storage", 100, 60),
+            ("default", "127.0.0.1", 3000, "server-storage", 100, 60),
             ("custom", "0.0.0.0", 9000, "custom_data", 200, 120),
             ("minimal", "192.168.1.1", 8888, "test_data", 50, 30),
         ];

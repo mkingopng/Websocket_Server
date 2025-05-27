@@ -10,82 +10,16 @@ use crate::messages::{ServerMessage, UpdateWithMetadata};
 use crate::storage::Storage;
 use crate::validation::middleware::{ValidationContext, ValidationMiddleware};
 use crate::AppState;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use openlifter_common::ClientToServer;
-use rand::Rng;
 use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::time::{self, Duration};
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-use crate::messages::Update;
-
-/// Maximum number of reconnection attempts before giving up
-const MAX_RECONNECT_ATTEMPTS: u8 = 3;
-
-/// Base delay between reconnection attempts in milliseconds
-const RECONNECT_DELAY_MS: u64 = 1000; // 1 second
-
-/// Macro to simplify validation error handling - DEPRECATED
-/// Use ValidationMiddleware instead for new code
-#[allow(unused_macros)]
-macro_rules! validate_or_error {
-    ($validation:expr, $error_code:expr) => {
-        match $validation {
-            Ok(val) => val,
-            Err(e) => {
-                return Ok(ServerMessage::Error {
-                    code: $error_code.to_string(),
-                    message: e.to_string(),
-                });
-            },
-        }
-    };
-}
-
-/// Macro to handle auth rate limiting
-macro_rules! check_auth_rate_limit {
-    ($self:expr) => {
-        if let Some(ip) = $self.client_ip {
-            if let Some(auth) = $self
-                .state
-                .auth
-                .as_any()
-                .downcast_ref::<crate::auth::DefaultAuth>()
-            {
-                if auth.check_auth_rate_limit(ip).is_err() {
-                    return Ok(ServerMessage::Error {
-                        code: "AUTH_RATE_LIMITED".to_string(),
-                        message: "Too many authentication attempts. Please try again later."
-                            .to_string(),
-                    });
-                }
-                auth.record_success(ip);
-            }
-        }
-    };
-}
-
-/// Macro to record failed auth attempts
-macro_rules! record_auth_failure {
-    ($self:expr) => {
-        if let Some(ip) = $self.client_ip {
-            if let Some(auth) = $self
-                .state
-                .auth
-                .as_any()
-                .downcast_ref::<crate::auth::DefaultAuth>()
-            {
-                auth.record_failed_attempt(ip);
-            }
-        }
-    };
-}
-
 /// WebSocket handler for processing messages
-pub struct WebSocketHandler<S> {
+pub struct WebSocketHandler<S: Storage + Clone + 'static> {
     /// Application state
     state: Arc<AppState<S>>,
     /// Client IP address
@@ -93,7 +27,6 @@ pub struct WebSocketHandler<S> {
     client_id: String,
     client_tx: Option<mpsc::Sender<ServerMessage>>,
     client_priority: u8,
-    reconnect_attempts: u8,
 }
 
 impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
@@ -103,7 +36,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             client_id: Uuid::new_v4().to_string(),
             client_tx: None,
             client_priority: 0,
-            reconnect_attempts: 0,
             client_ip: None,
         }
     }
@@ -128,8 +60,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
 
         info!("Client {} registered for meet {}", self.client_id, meet_id);
 
-        // Reset reconnect attempts on successful registration
-        self.reconnect_attempts = 0;
         Ok(())
     }
 
@@ -188,42 +118,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         resolved_updates
     }
 
-    // Try to reconnect after a network interruption
-    async fn try_reconnect(&mut self, meet_id: &str, session_token: &str) -> Result<bool> {
-        if self.reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
-            return Err(anyhow!("Exceeded maximum reconnection attempts"));
-        }
-
-        self.reconnect_attempts += 1;
-
-        // Log reconnection attempt
-        info!(
-            "Attempting to reconnect client {} to meet {} (attempt {}/{})",
-            self.client_id, meet_id, self.reconnect_attempts, MAX_RECONNECT_ATTEMPTS
-        );
-
-        // Wait before reconnecting
-        time::sleep(Duration::from_millis(
-            RECONNECT_DELAY_MS * u64::from(self.reconnect_attempts),
-        ))
-        .await;
-
-        // Validate the session to see if it's still valid
-        let session_valid = self.state.auth.validate_session(session_token).await;
-
-        if session_valid {
-            // Session is still valid - we can recover
-            info!(
-                "Reconnection successful for client {} to meet {}",
-                self.client_id, meet_id
-            );
-            return Ok(true);
-        }
-
-        // Session is no longer valid
-        Err(anyhow!("Session is no longer valid"))
-    }
-
     /// Initiate state recovery for a meet
     /// This method is called when the server detects a state inconsistency
     /// or after restart. It broadcasts a request to all connected clients
@@ -249,115 +143,8 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
         Ok(())
     }
 
-    /// Handle a state recovery response from a client
-    /// This method processes updates from a client during state recovery,
-    /// resolving conflicts and updating the server's state.
-    #[allow(dead_code)]
-    async fn handle_state_recovery_response(
-        &self,
-        meet_id: &str,
-        session_token: &str,
-        _last_seq_num: u64,
-        updates: Vec<Update>,
-        priority: u8,
-    ) -> Result<ServerMessage> {
-        // Validate session
-        let session_valid = self.state.auth.validate_session(session_token).await;
-        if !session_valid {
-            return Ok(ServerMessage::InvalidSession {
-                session_token: session_token.to_string(),
-            });
-        }
-
-        info!(
-            "Processing state recovery response from client {} with {} updates",
-            self.client_id,
-            updates.len()
-        );
-
-        // Get handle to the meet actor using if let instead of match
-        let meet_handle = if let Some(handle) = self.state.meet_handles.get(meet_id) {
-            handle.clone()
-        } else {
-            // Create a new meet actor if one doesn't exist
-            let storage = self.state.storage.clone();
-            let handle = crate::meet_actor::spawn_meet_actor(meet_id, storage).await;
-            self.state
-                .meet_handles
-                .insert(meet_id.to_string(), handle.clone());
-            handle
-        };
-
-        // Process the recovery updates
-        let (new_seq, updates_recovered) = match meet_handle
-            .recover_state(self.client_id.clone(), priority, updates)
-            .await
-        {
-            Ok(result) => result,
-            Err(e) => {
-                return Ok(ServerMessage::Error {
-                    code: "RECOVERY_ERROR".to_string(),
-                    message: e.to_string(),
-                });
-            },
-        };
-
-        // Notify the client that recovery is complete
-        Ok(ServerMessage::StateRecovered {
-            meet_id: meet_id.to_string(),
-            new_seq_num: new_seq,
-            updates_recovered,
-        })
-    }
-
-    /// Helper function to handle session validation with automatic reconnection
-    async fn validate_session_or_reconnect(
-        &mut self,
-        meet_id: &str,
-        session_token: &str,
-        retry_msg: ClientToServer,
-    ) -> Result<bool, ServerMessage> {
-        if !self.state.auth.validate_session(session_token).await {
-            record_auth_failure!(self);
-            match self.try_reconnect(meet_id, session_token).await {
-                Ok(reconnected) => {
-                    if reconnected {
-                        // Successfully reconnected - retry the operation
-                        match Box::pin(self.handle_message(retry_msg)).await {
-                            Ok(response) => Err(response),
-                            Err(_) => Err(ServerMessage::InvalidSession {
-                                session_token: session_token.to_string(),
-                            }),
-                        }
-                    } else {
-                        Err(ServerMessage::InvalidSession {
-                            session_token: session_token.to_string(),
-                        })
-                    }
-                },
-                Err(_) => Err(ServerMessage::InvalidSession {
-                    session_token: session_token.to_string(),
-                }),
-            }
-        } else {
-            Ok(true)
-        }
-    }
-
-    /// Helper function to get or create meet handle
-    async fn get_or_create_meet_handle(&self, meet_id: &str) -> crate::meet_actor::MeetHandle {
-        if let Some(handle) = self.state.meet_handles.get(meet_id) {
-            handle.clone()
-        } else {
-            let storage = self.state.storage.clone();
-            let handle = crate::meet_actor::spawn_meet_actor(meet_id, storage).await;
-            self.state
-                .meet_handles
-                .insert(meet_id.to_string(), handle.clone());
-            handle
-        }
-    }
-
+    /// Process client messages using the service layer
+    ///
     /// # Supported Message Types
     /// - `CreateMeet`: Create a new meet with specified parameters
     /// - `JoinMeet`: Join an existing meet with credentials
@@ -366,9 +153,8 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     /// - `PublishMeet`: Publish meet results and generate CSV output
     ///
     /// # Network Resilience
-    /// If a message arrives with an invalid session token (e.g., after a network
-    /// interruption), the handler will attempt to reconnect the client automatically.
-    /// This provides seamless recovery from temporary network issues.
+    /// Messages are now handled by the service layer which provides better
+    /// error handling and validation patterns.
     ///
     /// # Error Handling
     /// Returns appropriate error responses for:
@@ -376,7 +162,6 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
     /// - Authentication failures
     /// - Rate limiting violations
     /// - Internal server errors
-    #[allow(clippy::too_many_lines)]
     pub async fn handle_message(&mut self, msg: ClientToServer) -> Result<ServerMessage> {
         debug!("Processing message: {:?}", msg);
 
@@ -387,317 +172,47 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             return Ok(server_error);
         }
 
-        // Process the message based on its type
-        match msg {
-            ClientToServer::CreateMeet {
-                this_location_name,
-                password,
-                endpoints,
-            } => {
-                info!("Creating new meet");
-                debug!(
-                    "Creating meet with location: '{}' and {} endpoints",
-                    this_location_name,
-                    endpoints.len()
-                );
-
-                // Use consolidated validation middleware
-                if let Err(server_error) = ValidationMiddleware::builder()
-                    .create_meet_fields(&this_location_name, &password)
-                    .execute()
+        // Use the message service to handle the message
+        match self
+            .state
+            .message_service
+            .handle_message(msg, &self.state, self.client_ip)
+            .await
+        {
+            Ok(server_message) => {
+                // Update client priority if this was a successful CreateMeet or JoinMeet
+                if let ServerMessage::MeetCreated { .. } | ServerMessage::MeetJoined { .. } =
+                    &server_message
                 {
-                    return Ok(server_error);
+                    // Priority would have been set during session creation
+                    // This could be enhanced to extract priority from the response if needed
                 }
-
-                // Generate a meet ID
-                let meet_id = format!(
-                    "{}-{}-{}",
-                    rand::thread_rng().gen_range(100..1000),
-                    rand::thread_rng().gen_range(100..1000),
-                    rand::thread_rng().gen_range(100..1000)
-                );
-
-                // Check auth rate limit
-                check_auth_rate_limit!(self);
-
-                // Register the meet ID as used
-                crate::validation::register_meet_id(&meet_id);
-
-                // Get priority from first endpoint or default to 5
-                let priority = endpoints.first().map(|e| e.priority).unwrap_or(5);
-
-                // Set client priority
-                self.set_priority(priority);
-
-                // Handle meet creation
-                let session = self
-                    .state
-                    .auth
-                    .new_session(meet_id.clone(), this_location_name, priority)
-                    .await;
-
-                // Return create response
-                Ok(ServerMessage::MeetCreated {
-                    meet_id,
-                    session_token: session,
-                })
+                Ok(server_message)
             },
-            ClientToServer::JoinMeet {
-                meet_id,
-                password,
-                location_name,
-            } => {
-                info!("Joining meet: {}", meet_id);
-                debug!(
-                    "Joining meet '{}' with location '{}'",
-                    meet_id, location_name
-                );
-
-                // Use consolidated validation middleware
-                if let Err(server_error) = ValidationMiddleware::builder()
-                    .join_meet_fields(&meet_id, &password, &location_name)
-                    .execute()
-                {
-                    return Ok(server_error);
-                }
-
-                // Check auth rate limit
-                check_auth_rate_limit!(self);
-
-                // Default priority for joining clients
-                let priority = 5;
-
-                // Set client priority
-                self.set_priority(priority);
-
-                // Check if the meet exists and the password is correct
-                // In a real implementation, this would verify against stored data
-
-                // For now, always accept the join request
-                let session = self
-                    .state
-                    .auth
-                    .new_session(meet_id.to_string(), location_name, priority)
-                    .await;
-
-                // Return join response
-                Ok(ServerMessage::MeetJoined {
-                    meet_id: meet_id.to_string(),
-                    session_token: session,
-                })
-            },
-            ClientToServer::UpdateInit {
-                session_token,
-                updates,
-            } => {
-                debug!("Update init with {} updates", updates.len());
-
-                // Use enhanced session validation
-                let session = match ValidationMiddleware::validate_session_and_get(
-                    &session_token,
-                    &self.state,
-                )
-                .await
-                {
-                    Ok(session) => session,
-                    Err(server_error) => return Ok(server_error),
-                };
-
-                let meet_id = session.meet_id.clone();
-
-                // First check if session is valid to catch InvalidSession before validation errors
-                if let Err(response) = self
-                    .validate_session_or_reconnect(
-                        &meet_id,
-                        &session_token,
-                        ClientToServer::UpdateInit {
-                            session_token: session_token.clone(),
-                            updates: updates.clone(),
-                        },
-                    )
-                    .await
-                {
-                    return Ok(response);
-                }
-
-                // Use batch validation for updates
-                let (valid_updates, rejected_updates) =
-                    ValidationMiddleware::validate_updates_batch(updates);
-
-                // If any updates were rejected, return early with rejection info
-                if !rejected_updates.is_empty() {
-                    return Ok(ServerMessage::UpdateRejected {
-                        meet_id,
-                        updates_rejected: rejected_updates,
-                    });
-                }
-
-                // Update client priority from session
-                self.set_priority(session.priority);
-
-                // Convert updates to the internal format
-                let internal_updates: Vec<crate::messages::Update> = valid_updates
-                    .into_iter()
-                    .map(|u| crate::messages::Update {
-                        location: u.update_key,
-                        value: u.update_value.to_string(),
-                        timestamp: chrono::Utc::now().timestamp(),
-                    })
-                    .collect();
-
-                // Return acknowledgment
-                Ok(ServerMessage::UpdateAck {
-                    meet_id,
-                    update_ids: internal_updates
-                        .iter()
-                        .map(|u| u.location.clone())
-                        .collect(),
-                })
-            },
-            ClientToServer::ClientPull {
-                session_token,
-                last_server_seq,
-            } => {
-                debug!("Client pull since seq {}", last_server_seq);
-
-                // Get session to retrieve meet_id
-                let session = match self.state.auth.get_session(&session_token).await {
-                    Some(session) => session,
-                    None => {
-                        return Ok(ServerMessage::InvalidSession {
-                            session_token: session_token.clone(),
-                        });
+            Err(app_error) => {
+                // Convert AppError to ServerMessage
+                let server_message = match app_error {
+                    crate::error::AppError::Auth(msg) => ServerMessage::Error {
+                        code: "AUTH_ERROR".to_string(),
+                        message: msg,
+                    },
+                    crate::error::AppError::InvalidInput(msg) => ServerMessage::Error {
+                        code: "VALIDATION_ERROR".to_string(),
+                        message: msg,
+                    },
+                    crate::error::AppError::AuthRateLimited => ServerMessage::Error {
+                        code: "AUTH_RATE_LIMITED".to_string(),
+                        message: "Too many authentication attempts. Please try again later."
+                            .to_string(),
+                    },
+                    _ => ServerMessage::Error {
+                        code: "INTERNAL_ERROR".to_string(),
+                        message: "An internal server error occurred".to_string(),
                     },
                 };
 
-                let meet_id = session.meet_id.clone();
-
-                // Validate session token using middleware
-                match ValidationMiddleware::validate_field(
-                    crate::validation::validate_session_token(&session_token),
-                    "INVALID_SESSION_TOKEN",
-                ) {
-                    Ok(_) => {},
-                    Err(server_error) => return Ok(server_error),
-                }
-
-                // Check session validity with automatic reconnection
-                if let Err(response) = self
-                    .validate_session_or_reconnect(
-                        &meet_id,
-                        &session_token,
-                        ClientToServer::ClientPull {
-                            session_token: session_token.clone(),
-                            last_server_seq,
-                        },
-                    )
-                    .await
-                {
-                    return Ok(response);
-                }
-
-                // Get handle to the meet actor
-                let _meet_handle = self.get_or_create_meet_handle(&meet_id).await;
-
-                // Pull updates since the specified sequence number
-                // For now, return empty updates since we need to implement proper pulling
-                let updates_with_metadata: Vec<UpdateWithMetadata> = Vec::new();
-
-                Ok(ServerMessage::ServerPull {
-                    meet_id,
-                    last_server_seq,
-                    updates_relayed: updates_with_metadata,
-                })
+                Ok(server_message)
             },
-            ClientToServer::PublishMeet {
-                session_token,
-                return_email,
-                opl_csv,
-            } => {
-                debug!("Publishing meet results");
-
-                // Use enhanced session validation
-                let session = match ValidationMiddleware::validate_session_and_get(
-                    &session_token,
-                    &self.state,
-                )
-                .await
-                {
-                    Ok(session) => session,
-                    Err(server_error) => return Ok(server_error),
-                };
-
-                let meet_id = session.meet_id.clone();
-
-                // Use consolidated validation middleware for multiple fields
-                if let Err(server_error) = ValidationMiddleware::builder()
-                    .publish_meet_fields(&session_token, &return_email)
-                    .execute()
-                {
-                    return Ok(server_error);
-                }
-
-                // Get handle to the meet actor
-                let meet_handle = self.get_or_create_meet_handle(&meet_id).await;
-
-                // Store CSV data
-                match meet_handle.store_csv(opl_csv, return_email).await {
-                    Ok(()) => Ok(ServerMessage::PublishAck { meet_id }),
-                    Err(e) => Ok(ServerMessage::Error {
-                        code: "PUBLISH_ERROR".to_string(),
-                        message: e.to_string(),
-                    }),
-                }
-            },
-            // ClientToServer::StateRecoveryResponse {
-            //     meet_id,
-            //     session_token,
-            //     last_seq_num,
-            //     updates,
-            //     priority,
-            // } => {
-            //     info!("State recovery response for meet: {}", meet_id);
-            //
-            //     // Validate meet ID
-            //     let meet_id = validate_or_error!(
-            //         crate::validation::validate_meet_id(&meet_id),
-            //         "INVALID_MEET_ID"
-            //     )
-            //     .to_string();
-            //
-            //     // Validate session token
-            //     validate_or_error!(
-            //         crate::validation::validate_session_token(&session_token),
-            //         "INVALID_SESSION_TOKEN"
-            //     );
-            //
-            //     // Validate updates (similar to UpdateInit)
-            //     let mut valid_updates = Vec::new();
-            //
-            //     for update in updates {
-            //         // Basic validation of location
-            //         if update.location.is_empty() {
-            //             continue;
-            //         }
-            //
-            //         // Basic validation of JSON structure in value
-            //         if serde_json::from_str::<serde_json::Value>(&update.value).is_err() {
-            //             continue;
-            //         }
-            //
-            //         // If all checks pass, keep the update
-            //         valid_updates.push(update);
-            //     }
-            //
-            //     // Process state recovery response
-            //     self.handle_state_recovery_response(
-            //         &meet_id,
-            //         &session_token,
-            //         last_seq_num,
-            //         valid_updates,
-            //         priority,
-            //     )
-            // },
         }
     }
 }

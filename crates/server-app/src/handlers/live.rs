@@ -36,11 +36,10 @@ async fn send_error(tx: &mpsc::Sender<Message>, msg: &str) -> Result<(), AppErro
 }
 
 /// Helper function to validate session and get session data
-async fn validate_and_get_session<S: Storage>(
+async fn validate_and_get_session<S: Storage + Clone + 'static>(
     session_token: &str,
     state: &AppState<S>,
 ) -> Result<crate::messages::Session, AppError> {
-    // Use enhanced validation middleware
     ValidationMiddleware::validate_session_and_get(session_token, state)
         .await
         .map_err(|_| AppError::Auth("Invalid session".to_string()))

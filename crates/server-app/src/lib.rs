@@ -12,6 +12,7 @@ pub mod meet_actor;
 pub mod messages;
 pub mod metrics;
 pub mod middleware;
+pub mod services;
 pub mod storage;
 #[cfg(test)]
 pub mod testing;
@@ -23,14 +24,15 @@ use crate::auth::{AuthRateLimiter, AuthService, DefaultAuth, PersistentSessionMa
 use crate::config::Settings;
 use crate::meet_actor::MeetHandle;
 use crate::middleware::rate_limit::RateLimiter;
-use crate::storage::FlatFileStorage;
+use crate::services::{MessageService, RateLimitingService, SessionService};
+use crate::storage::{FlatFileStorage, Storage};
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Application state shared across all handlers
 #[derive(Clone)]
-pub struct AppState<S> {
+pub struct AppState<S: Storage + Clone + 'static> {
     /// Authentication service
     pub auth: Arc<dyn AuthService>,
     /// Session manager
@@ -48,9 +50,15 @@ pub struct AppState<S> {
         Arc<dashmap::DashMap<String, Vec<tokio::sync::mpsc::Sender<messages::ServerMessage>>>>,
     /// Active meet handles
     pub meet_handles: Arc<dashmap::DashMap<String, MeetHandle>>,
+    /// Centralized session service
+    pub session_service: Arc<SessionService>,
+    /// Message processing service
+    pub message_service: Arc<MessageService<S>>,
+    /// Rate limiting service
+    pub rate_limiting_service: Arc<RateLimitingService>,
 }
 
-impl<S> AppState<S> {
+impl<S: Storage + Clone + 'static> AppState<S> {
     /// Create a new application state
     pub async fn new(storage: S, config: &Settings) -> Result<Self, Box<dyn Error>> {
         // Create sessions directory in the storage path
@@ -67,13 +75,22 @@ impl<S> AppState<S> {
             sessions.clone(),
             auth_rate_limiter.clone(),
         ));
+
+        // Clone auth for services that need DefaultAuth specifically
+        let auth_arc_dyn = auth.clone() as Arc<dyn AuthService>;
+
         let settings = Arc::new(config.clone());
         let rate_limiter = Arc::new(RateLimiter::new(std::time::Duration::from_secs(60), 100));
         let clients = Arc::new(dashmap::DashMap::new());
         let meet_handles = Arc::new(dashmap::DashMap::new());
 
+        // Initialize services
+        let session_service = Arc::new(SessionService::new(auth_arc_dyn.clone()));
+        let message_service = Arc::new(MessageService::new());
+        let rate_limiting_service = Arc::new(RateLimitingService::new(Some(auth.clone())));
+
         Ok(Self {
-            auth,
+            auth: auth_arc_dyn,
             sessions: Arc::new(sessions),
             storage,
             settings,
@@ -81,6 +98,9 @@ impl<S> AppState<S> {
             auth_rate_limiter,
             clients,
             meet_handles,
+            session_service,
+            message_service,
+            rate_limiting_service,
         })
     }
 

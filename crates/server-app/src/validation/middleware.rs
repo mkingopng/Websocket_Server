@@ -123,7 +123,7 @@ impl ValidationMiddleware {
         state: &crate::AppState<S>,
     ) -> Result<crate::messages::Session, ServerMessage>
     where
-        S: crate::storage::Storage + Send + Sync,
+        S: crate::storage::Storage + Send + Sync + Clone + 'static,
     {
         // Validate session token format
         Self::validate_field(
