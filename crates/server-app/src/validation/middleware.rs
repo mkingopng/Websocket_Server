@@ -76,6 +76,17 @@ impl ValidationMiddleware {
         }
     }
 
+    /// Enhanced validation that returns Result instead of ServerMessage for better composability
+    pub fn validate_field_result<T>(
+        validation_result: ValidationResult<T>,
+        error_code: &str,
+    ) -> Result<T, String> {
+        match validation_result {
+            Ok(value) => Ok(value),
+            Err(e) => Err(format!("{}: {}", error_code, e.to_string())),
+        }
+    }
+
     /// Validate multiple fields and collect errors
     pub fn validate_fields(
         validations: Vec<(&str, ValidationResult<()>)>,
@@ -96,6 +107,56 @@ impl ValidationMiddleware {
         }
 
         Ok(())
+    }
+
+    /// Convenient macro-like function to validate or return error
+    pub fn validate_or_return<T>(
+        validation_result: ValidationResult<T>,
+        error_code: &str,
+    ) -> Result<T, ServerMessage> {
+        Self::validate_field(validation_result, error_code)
+    }
+
+    /// Validate session and return session data or appropriate error
+    pub async fn validate_session_and_get<S>(
+        session_token: &str,
+        state: &crate::AppState<S>,
+    ) -> Result<crate::messages::Session, ServerMessage>
+    where
+        S: crate::storage::Storage + Send + Sync,
+    {
+        // Validate session token format
+        Self::validate_field(
+            super::validate_session_token(session_token),
+            "INVALID_SESSION_TOKEN",
+        )?;
+
+        // Get session data
+        match state.auth.get_session(session_token).await {
+            Some(session) => Ok(session),
+            None => Err(ServerMessage::InvalidSession {
+                session_token: session_token.to_string(),
+            }),
+        }
+    }
+
+    /// Validate updates in batch and return valid/invalid lists
+    pub fn validate_updates_batch(
+        updates: Vec<openlifter_common::Update>,
+    ) -> (Vec<openlifter_common::Update>, Vec<(String, String)>) {
+        let mut valid_updates = Vec::new();
+        let mut rejected_updates = Vec::new();
+
+        for update in updates {
+            match Self::validate_field_result(super::validate_update(&update), "INVALID_UPDATE") {
+                Ok(_) => valid_updates.push(update),
+                Err(error_msg) => {
+                    rejected_updates.push((update.update_key.clone(), error_msg));
+                },
+            }
+        }
+
+        (valid_updates, rejected_updates)
     }
 
     /// Map ValidationError to appropriate error code
@@ -175,6 +236,80 @@ impl ValidationBuilder {
             validator: Box::new(|data| super::validate_location_name(data).map(|_| ())),
             error_code: "INVALID_LOCATION".to_string(),
         }
+    }
+
+    /// Add session token validation
+    pub fn session_token(self, session_token: &str) -> ValidationBuilderWithData<String> {
+        ValidationBuilderWithData {
+            inner: self,
+            data: session_token.to_string(),
+            validator: Box::new(|data| super::validate_session_token(data).map(|_| ())),
+            error_code: "INVALID_SESSION_TOKEN".to_string(),
+        }
+    }
+
+    /// Validate CreateMeet message fields
+    pub fn create_meet_fields(mut self, location_name: &str, password: &str) -> Self {
+        // Add location name validation
+        let location_validation = {
+            let location = location_name.to_string();
+            move || super::validate_location_name(&location).map(|_| ())
+        };
+        self.validations.push(Box::new(location_validation));
+
+        // Add password validation
+        let password_validation = {
+            let password = password.to_string();
+            move || super::validate_password(&password).map(|_| ())
+        };
+        self.validations.push(Box::new(password_validation));
+
+        self
+    }
+
+    /// Validate JoinMeet message fields
+    pub fn join_meet_fields(mut self, meet_id: &str, password: &str, location_name: &str) -> Self {
+        // Add meet ID validation
+        let meet_id_validation = {
+            let meet_id = meet_id.to_string();
+            move || super::validate_meet_id(&meet_id).map(|_| ())
+        };
+        self.validations.push(Box::new(meet_id_validation));
+
+        // Add password validation
+        let password_validation = {
+            let password = password.to_string();
+            move || super::validate_password(&password).map(|_| ())
+        };
+        self.validations.push(Box::new(password_validation));
+
+        // Add location name validation
+        let location_validation = {
+            let location = location_name.to_string();
+            move || super::validate_location_name(&location).map(|_| ())
+        };
+        self.validations.push(Box::new(location_validation));
+
+        self
+    }
+
+    /// Validate publish meet fields
+    pub fn publish_meet_fields(mut self, session_token: &str, return_email: &str) -> Self {
+        // Add session token validation
+        let session_validation = {
+            let token = session_token.to_string();
+            move || super::validate_session_token(&token).map(|_| ())
+        };
+        self.validations.push(Box::new(session_validation));
+
+        // Add email validation
+        let email_validation = {
+            let email = return_email.to_string();
+            move || super::validate_email(&email).map(|_| ())
+        };
+        self.validations.push(Box::new(email_validation));
+
+        self
     }
 
     /// Execute all validations

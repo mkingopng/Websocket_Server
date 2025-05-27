@@ -1,8 +1,8 @@
 // ============================
 // crates/server-app/src/handlers/live.rs
 // ============================
-//! Live WebSocket handlers.
-use crate::auth::{hash_password, validate_password_strength, PasswordRequirements};
+//! Live WebSocket handlers
+use crate::auth::hash_password;
 use crate::storage::Storage;
 use crate::validation::middleware::ValidationMiddleware;
 use crate::{error::AppError, AppState};
@@ -35,24 +35,15 @@ async fn send_error(tx: &mpsc::Sender<Message>, msg: &str) -> Result<(), AppErro
     .await
 }
 
-/// Helper function to validate session and get it
+/// Helper function to validate session and get session data
 async fn validate_and_get_session<S: Storage>(
     session_token: &str,
     state: &AppState<S>,
 ) -> Result<crate::messages::Session, AppError> {
-    // Use validation middleware for session token validation
-    ValidationMiddleware::validate_field(
-        crate::validation::validate_session_token(session_token),
-        "INVALID_SESSION_TOKEN",
-    )
-    .map_err(|_| AppError::Auth("Invalid session token format".to_string()))?;
-
-    // Get and validate session
-    state
-        .auth
-        .get_session(session_token)
+    // Use enhanced validation middleware
+    ValidationMiddleware::validate_session_and_get(session_token, state)
         .await
-        .ok_or_else(|| AppError::Auth("Invalid session".to_string()))
+        .map_err(|_| AppError::Auth("Invalid session".to_string()))
 }
 
 /// Helper function to update session metrics
@@ -89,32 +80,13 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             password,
             endpoints,
         } => {
-            // Use validation middleware for consolidated validation
-            match ValidationMiddleware::validate_fields(vec![
-                (
-                    "location_name",
-                    crate::validation::validate_location_name(&this_location_name).map(|_| ()),
-                ),
-                (
-                    "password",
-                    crate::validation::validate_password(&password).map(|_| ()),
-                ),
-            ]) {
-                Ok(_) => {},
-                Err(_) => {
-                    // Validate password strength using the auth module
-                    let requirements = PasswordRequirements::default();
-                    if !validate_password_strength(&password, &requirements) {
-                        send_error(
-                            &tx,
-                            &format!(
-                                "Password must be at least {} characters and contain uppercase, lowercase, digit, and special character",
-                                requirements.min_length
-                            ),
-                        ).await?;
-                        return Ok(());
-                    }
-                },
+            // Use consolidated validation middleware
+            if let Err(_) = ValidationMiddleware::builder()
+                .create_meet_fields(&this_location_name, &password)
+                .execute()
+            {
+                send_error(&tx, "Invalid meet parameters").await?;
+                return Ok(());
             }
 
             // Generate meet ID and hash password
@@ -157,21 +129,13 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             password,
             location_name,
         } => {
-            // Use validation middleware builder pattern for cleaner validation
-            match ValidationMiddleware::builder()
-                .meet_id(&meet_id)
-                .and()
-                .password(&password)
-                .and()
-                .location_name(&location_name)
-                .and()
+            // Use consolidated validation middleware
+            if let Err(_) = ValidationMiddleware::builder()
+                .join_meet_fields(&meet_id, &password, &location_name)
                 .execute()
             {
-                Ok(_) => {},
-                Err(_) => {
-                    send_error(&tx, "Invalid meet credentials").await?;
-                    return Ok(());
-                },
+                send_error(&tx, "Invalid meet credentials").await?;
+                return Ok(());
             }
 
             // Verify password against stored hash
@@ -188,7 +152,7 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             session_token,
             updates,
         } => {
-            // Use the consolidated session validation helper
+            // use the consolidated session validation helper
             let session = validate_and_get_session(&session_token, state).await?;
 
             let handle = state
@@ -198,19 +162,18 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
 
             let updates_len = updates.len();
 
-            // Validate updates using middleware
-            for update in &updates {
-                if let Err(_) = ValidationMiddleware::validate_field(
-                    crate::validation::validate_update(update),
-                    "INVALID_UPDATE",
-                ) {
-                    send_error(&tx, "Invalid update data").await?;
-                    return Ok(());
-                }
+            // Use batch validation for updates
+            let (valid_updates, rejected_updates) =
+                ValidationMiddleware::validate_updates_batch(updates);
+
+            // If any updates were rejected, send error
+            if !rejected_updates.is_empty() {
+                send_error(&tx, "Invalid update data").await?;
+                return Ok(());
             }
 
             // Convert update formats
-            let backend_updates = updates
+            let backend_updates = valid_updates
                 .into_iter()
                 .map(|u| crate::messages::Update {
                     location: u.update_key,
@@ -237,14 +200,15 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
                 Ok(results) => {
                     let update_acks: Vec<(u64, u64)> =
                         results.iter().map(|(id, seq)| (*id, *seq)).collect();
+
                     send_response(&tx, ServerToClient::UpdateAck { update_acks }).await?;
+
+                    update_session_metrics("update_applied", Some(updates_len), None);
                 },
                 Err(e) => {
-                    send_error(&tx, &e.to_string()).await?;
+                    send_error(&tx, &format!("Failed to apply updates: {}", e)).await?;
                 },
             }
-
-            update_session_metrics("updated", Some(updates_len), None);
         },
 
         ClientToServer::ClientPull {
@@ -278,22 +242,13 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             return_email,
             opl_csv,
         } => {
-            // Use validation middleware for multiple field validation
-            match ValidationMiddleware::validate_fields(vec![
-                (
-                    "session_token",
-                    crate::validation::validate_session_token(&session_token).map(|_| ()),
-                ),
-                (
-                    "email",
-                    crate::validation::validate_email(&return_email).map(|_| ()),
-                ),
-            ]) {
-                Ok(_) => {},
-                Err(_) => {
-                    send_error(&tx, "Invalid session or email").await?;
-                    return Ok(());
-                },
+            // Use consolidated validation middleware
+            if let Err(_) = ValidationMiddleware::builder()
+                .publish_meet_fields(&session_token, &return_email)
+                .execute()
+            {
+                send_error(&tx, "Invalid session or email").await?;
+                return Ok(());
             }
 
             // Validate session exists

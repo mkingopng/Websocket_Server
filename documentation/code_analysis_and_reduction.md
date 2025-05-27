@@ -381,12 +381,18 @@ Based on my analysis, here's a comprehensive report on the codebase with opportu
 - **Reduce to ~30 functions** (eliminate 19 redundant functions)
 
 ----
+how many
+- lines of code
+- files
+- functions
+do we have?
+
+- review all the tests and ensure that: we have no duplication in tests unless necessary; the tests we have are
+  all being executed in pre-commit-hook.sh
 - remove genuine dead code
 - remove commented out code
 - reduce complexity
 - remove duplication in functionality
-- review all the tests and ensure that: we have no duplication in tests unless necessary; the tests we have are 
-  all being executed in pre-commit-hook.sh
 - other options for pre-commit-hooks?
 - run tarpaulin and review test coverage
 - how can we measure and improve performance?

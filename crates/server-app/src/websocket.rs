@@ -394,29 +394,20 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 password,
                 endpoints,
             } => {
-                info!("Creating meet with location: {}", this_location_name);
+                info!("Creating new meet");
                 debug!(
-                    "Creating meet with location '{}' and {} endpoints",
+                    "Creating meet with location: '{}' and {} endpoints",
                     this_location_name,
                     endpoints.len()
                 );
 
-                // Validate inputs using the new middleware
-                let _password = match ValidationMiddleware::validate_field(
-                    crate::validation::validate_password(&password),
-                    "INVALID_PASSWORD",
-                ) {
-                    Ok(p) => p,
-                    Err(server_error) => return Ok(server_error),
-                };
-
-                let location_name = match ValidationMiddleware::validate_field(
-                    crate::validation::validate_location_name(&this_location_name),
-                    "INVALID_LOCATION",
-                ) {
-                    Ok(name) => name.to_string(),
-                    Err(server_error) => return Ok(server_error),
-                };
+                // Use consolidated validation middleware
+                if let Err(server_error) = ValidationMiddleware::builder()
+                    .create_meet_fields(&this_location_name, &password)
+                    .execute()
+                {
+                    return Ok(server_error);
+                }
 
                 // Generate a meet ID
                 let meet_id = format!(
@@ -442,7 +433,7 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                 let session = self
                     .state
                     .auth
-                    .new_session(meet_id.clone(), location_name, priority)
+                    .new_session(meet_id.clone(), this_location_name, priority)
                     .await;
 
                 // Return create response
@@ -462,24 +453,13 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     meet_id, location_name
                 );
 
-                // Use validation middleware for consolidated validation
-                let validated_data = match ValidationMiddleware::builder()
-                    .meet_id(&meet_id)
-                    .and()
-                    .password(&password)
-                    .and()
-                    .location_name(&location_name)
-                    .and()
+                // Use consolidated validation middleware
+                if let Err(server_error) = ValidationMiddleware::builder()
+                    .join_meet_fields(&meet_id, &password, &location_name)
                     .execute()
                 {
-                    Ok(()) => {
-                        // All validations passed, extract the validated data
-                        (meet_id, password, location_name)
-                    },
-                    Err(server_error) => return Ok(server_error),
-                };
-
-                let (meet_id, _password, location_name) = validated_data;
+                    return Ok(server_error);
+                }
 
                 // Check auth rate limit
                 check_auth_rate_limit!(self);
@@ -512,14 +492,15 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             } => {
                 debug!("Update init with {} updates", updates.len());
 
-                // Get session to retrieve meet_id and priority
-                let session = match self.state.auth.get_session(&session_token).await {
-                    Some(session) => session,
-                    None => {
-                        return Ok(ServerMessage::InvalidSession {
-                            session_token: session_token.clone(),
-                        });
-                    },
+                // Use enhanced session validation
+                let session = match ValidationMiddleware::validate_session_and_get(
+                    &session_token,
+                    &self.state,
+                )
+                .await
+                {
+                    Ok(session) => session,
+                    Err(server_error) => return Ok(server_error),
                 };
 
                 let meet_id = session.meet_id.clone();
@@ -539,37 +520,9 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
                     return Ok(response);
                 }
 
-                // Validate session token using middleware
-                match ValidationMiddleware::validate_field(
-                    crate::validation::validate_session_token(&session_token),
-                    "INVALID_SESSION_TOKEN",
-                ) {
-                    Ok(_) => {},
-                    Err(server_error) => return Ok(server_error),
-                }
-
-                // Validate each update
-                let mut valid_updates = Vec::new();
-                let mut rejected_updates = Vec::new();
-
-                for update in updates {
-                    // Use validation middleware for update validation
-                    match ValidationMiddleware::validate_field(
-                        crate::validation::validate_update(&update),
-                        "INVALID_UPDATE",
-                    ) {
-                        Ok(_) => valid_updates.push(update),
-                        Err(ServerMessage::Error { message, .. }) => {
-                            rejected_updates.push((update.update_key.clone(), message));
-                        },
-                        Err(_) => {
-                            rejected_updates.push((
-                                update.update_key.clone(),
-                                "Update validation failed".to_string(),
-                            ));
-                        },
-                    }
-                }
+                // Use batch validation for updates
+                let (valid_updates, rejected_updates) =
+                    ValidationMiddleware::validate_updates_batch(updates);
 
                 // If any updates were rejected, return early with rejection info
                 if !rejected_updates.is_empty() {
@@ -663,38 +616,25 @@ impl<S: Storage + Send + Sync + Clone + 'static> WebSocketHandler<S> {
             } => {
                 debug!("Publishing meet results");
 
-                // Get session to retrieve meet_id
-                let session = match self.state.auth.get_session(&session_token).await {
-                    Some(session) => session,
-                    None => {
-                        return Ok(ServerMessage::InvalidSession {
-                            session_token: session_token.clone(),
-                        });
-                    },
+                // Use enhanced session validation
+                let session = match ValidationMiddleware::validate_session_and_get(
+                    &session_token,
+                    &self.state,
+                )
+                .await
+                {
+                    Ok(session) => session,
+                    Err(server_error) => return Ok(server_error),
                 };
 
                 let meet_id = session.meet_id.clone();
 
-                // Use validation middleware for multiple field validation
-                match ValidationMiddleware::validate_fields(vec![
-                    (
-                        "session_token",
-                        crate::validation::validate_session_token(&session_token).map(|_| ()),
-                    ),
-                    (
-                        "email",
-                        crate::validation::validate_email(&return_email).map(|_| ()),
-                    ),
-                ]) {
-                    Ok(_) => {},
-                    Err(server_error) => return Ok(server_error),
-                }
-
-                // Check if session is valid
-                if !self.state.auth.validate_session(&session_token).await {
-                    return Ok(ServerMessage::InvalidSession {
-                        session_token: session_token.clone(),
-                    });
+                // Use consolidated validation middleware for multiple fields
+                if let Err(server_error) = ValidationMiddleware::builder()
+                    .publish_meet_fields(&session_token, &return_email)
+                    .execute()
+                {
+                    return Ok(server_error);
                 }
 
                 // Get handle to the meet actor
