@@ -1762,3 +1762,885 @@
 [SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
 [SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg NoLift
 [SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":86.690735}
+[SIMULATION LOG] Weigh-in for John Smith: 86.690735kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 86.690735kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":81.66834}
+[SIMULATION LOG] Weigh-in for Jane Doe: 81.66834kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 81.66834kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":100.48011}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 100.48011kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 100.48011kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":92.12149}
+[SIMULATION LOG] Weigh-in for John Smith: 92.12149kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 92.12149kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":80.48719}
+[SIMULATION LOG] Weigh-in for Jane Doe: 80.48719kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 80.48719kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":95.45522}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 95.45522kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 95.45522kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":91.77595}
+[SIMULATION LOG] Weigh-in for John Smith: 91.77595kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 91.77595kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":80.904816}
+[SIMULATION LOG] Weigh-in for Jane Doe: 80.904816kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 80.904816kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":102.90934}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 102.90934kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 102.90934kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":91.199295}
+[SIMULATION LOG] Weigh-in for John Smith: 91.199295kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 91.199295kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":80.39661}
+[SIMULATION LOG] Weigh-in for Jane Doe: 80.39661kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 80.39661kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":99.300026}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 99.300026kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 99.300026kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":86.4312}
+[SIMULATION LOG] Weigh-in for John Smith: 86.4312kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 86.4312kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":80.84426}
+[SIMULATION LOG] Weigh-in for Jane Doe: 80.84426kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 80.84426kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":104.79208}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 104.79208kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 104.79208kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":88.33188}
+[SIMULATION LOG] Weigh-in for John Smith: 88.33188kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 88.33188kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":80.51653}
+[SIMULATION LOG] Weigh-in for Jane Doe: 80.51653kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 80.51653kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":101.16735}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 101.16735kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 101.16735kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"John Smith","weight_class":"93kg","gender":"M","age":25}
+[SIMULATION LOG] Registering lifter: John Smith
+[SIMULATION LOG] [OK] Registered lifter: John Smith
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Jane Doe","weight_class":"84kg","gender":"F","age":28}
+[SIMULATION LOG] Registering lifter: Jane Doe
+[SIMULATION LOG] [OK] Registered lifter: Jane Doe
+[SIMULATION LOG] Ingesting JSON: {"type":"register","name":"Bob Johnson","weight_class":"105kg","gender":"M","age":32}
+[SIMULATION LOG] Registering lifter: Bob Johnson
+[SIMULATION LOG] [OK] Registered lifter: Bob Johnson
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"John Smith","body_weight":92.9375}
+[SIMULATION LOG] Weigh-in for John Smith: 92.9375kg
+[SIMULATION LOG] [OK] Weigh-in recorded for John Smith: 92.9375kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Jane Doe","body_weight":81.9347}
+[SIMULATION LOG] Weigh-in for Jane Doe: 81.9347kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Jane Doe: 81.9347kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"weigh_in","lifter":"Bob Johnson","body_weight":96.09711}
+[SIMULATION LOG] Weigh-in for Bob Johnson: 96.09711kg
+[SIMULATION LOG] [OK] Weigh-in recorded for Bob Johnson: 96.09711kg
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":100,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 100kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"squat","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe squat 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"squat","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson squat 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":1,"weight":80,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 1 80kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 1 80kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":2,"weight":85,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 2 85kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":2,"weight":85,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 2 85kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"bench","attempt":3,"weight":90,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith bench 3 90kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith bench 3 90kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"bench","attempt":3,"weight":90,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson bench 3 90kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson bench 3 90kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":1,"weight":120,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 1 120kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":1,"weight":120,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 1 120kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 1 120kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":2,"weight":125,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 2 125kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":2,"weight":125,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 2 125kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"John Smith","lift":"deadlift","attempt":3,"weight":130,"decision":"GoodLift"}
+[SIMULATION LOG] Attempt: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] [OK] Attempt processed: John Smith deadlift 3 130kg GoodLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Jane Doe","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Jane Doe deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Jane Doe deadlift 3 130kg NoLift
+[SIMULATION LOG] Ingesting JSON: {"type":"attempt","lifter":"Bob Johnson","lift":"deadlift","attempt":3,"weight":130,"decision":"NoLift"}
+[SIMULATION LOG] Attempt: Bob Johnson deadlift 3 130kg NoLift
+[SIMULATION LOG] [OK] Attempt processed: Bob Johnson deadlift 3 130kg NoLift

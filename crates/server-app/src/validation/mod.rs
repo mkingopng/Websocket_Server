@@ -2,8 +2,8 @@
 // crates/server-app/src/validation/mod.rs
 // ============================
 //! Message validation module.
-use crate::messages::{ClientMessage, Update};
 use once_cell::sync::Lazy;
+use openlifter_common::{ClientToServer, Update};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -226,59 +226,59 @@ pub fn sanitize_string(input: &str) -> String {
 
 /// Validate an update
 pub fn validate_update(update: &Update) -> ValidationResult<()> {
-    if update.location.is_empty() {
+    // Validate update key
+    if update.update_key.is_empty() {
         return Err(ValidationError::InvalidUpdate(
-            "Update location must not be empty".to_string(),
+            "Update key must not be empty".to_string(),
         ));
     }
-    if update.timestamp <= 0 {
+
+    // Basic validation of update key format (should be a valid path)
+    if update.update_key.contains("..") || update.update_key.starts_with('/') {
         return Err(ValidationError::InvalidUpdate(
-            "Update timestamp must be positive".to_string(),
+            "Invalid update key format".to_string(),
         ));
     }
-    serde_json::from_str::<serde_json::Value>(&update.value).map_err(|e| {
-        ValidationError::InvalidUpdate(format!("Invalid JSON in update value: {e}"))
-    })?;
+
+    // Validate that update value is not null
+    if update.update_value.is_null() {
+        return Err(ValidationError::InvalidUpdate(
+            "Update value must not be null".to_string(),
+        ));
+    }
+
     Ok(())
 }
 
-/// Validates a client message
-pub fn validate_client_message(message: &ClientMessage) -> ValidationResult<()> {
+/// Validate a client message
+pub fn validate_client_message(message: &ClientToServer) -> ValidationResult<()> {
     match message {
-        ClientMessage::CreateMeet {
-            meet_id,
+        ClientToServer::CreateMeet {
+            this_location_name,
             password,
-            location_name,
-            priority: _,
+            endpoints,
         } => {
-            validate_meet_id(meet_id)?;
+            validate_location_name(this_location_name)?;
+            validate_password(password)?;
 
-            // Check for meet ID uniqueness
-            if !is_meet_id_unique(meet_id) {
-                return Err(ValidationError::MeetIdExists(format!(
-                    "Meet ID '{meet_id}' already exists"
-                )));
+            // Validate endpoints
+            for endpoint in endpoints {
+                validate_location_name(&endpoint.location_name)?;
             }
-
-            validate_password(password)?;
-            validate_location_name(location_name)?;
         },
-        ClientMessage::JoinMeet {
+        ClientToServer::JoinMeet {
             meet_id,
             password,
             location_name,
-            priority: _,
         } => {
             validate_meet_id(meet_id)?;
             validate_password(password)?;
             validate_location_name(location_name)?;
         },
-        ClientMessage::UpdateInit {
-            meet_id,
+        ClientToServer::UpdateInit {
             session_token,
             updates,
         } => {
-            validate_meet_id(meet_id)?;
             validate_session_token(session_token)?;
 
             // Validate each update
@@ -286,21 +286,17 @@ pub fn validate_client_message(message: &ClientMessage) -> ValidationResult<()> 
                 validate_update(update)?;
             }
         },
-        ClientMessage::ClientPull {
-            meet_id,
+        ClientToServer::ClientPull {
             session_token,
             last_server_seq: _,
         } => {
-            validate_meet_id(meet_id)?;
             validate_session_token(session_token)?;
         },
-        ClientMessage::PublishMeet {
-            meet_id,
+        ClientToServer::PublishMeet {
             session_token,
             return_email,
             opl_csv,
         } => {
-            validate_meet_id(meet_id)?;
             validate_session_token(session_token)?;
             validate_email(return_email)?;
 
@@ -311,21 +307,6 @@ pub fn validate_client_message(message: &ClientMessage) -> ValidationResult<()> 
                 ));
             }
         },
-        ClientMessage::StateRecoveryResponse {
-            meet_id,
-            session_token,
-            last_seq_num: _,
-            updates,
-            priority: _,
-        } => {
-            validate_meet_id(meet_id)?;
-            validate_session_token(session_token)?;
-
-            // Validate each update
-            for update in updates {
-                validate_update(update)?;
-            }
-        },
     }
 
     Ok(())
@@ -334,7 +315,6 @@ pub fn validate_client_message(message: &ClientMessage) -> ValidationResult<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{ClientMessage, Update};
 
     #[test]
     fn test_validations() {
@@ -367,18 +347,18 @@ mod tests {
 
         // Update tests
         let valid_update = Update {
-            location: "some.location".to_string(),
-            value: "{}".to_string(),
-            timestamp: 12345,
+            update_key: "some.location".to_string(),
+            update_value: serde_json::json!({}),
+            local_seq_num: 1,
+            after_server_seq_num: 0,
         };
         assert!(validate_update(&valid_update).is_ok());
 
         // Client message tests
-        let valid_msg = ClientMessage::CreateMeet {
-            meet_id: "valid-meet".to_string(),
+        let valid_msg = ClientToServer::CreateMeet {
+            this_location_name: "Valid Location".to_string(),
             password: "Password123".to_string(),
-            location_name: "Valid Location".to_string(),
-            priority: 5,
+            endpoints: vec![],
         };
         assert!(validate_client_message(&valid_msg).is_ok());
     }

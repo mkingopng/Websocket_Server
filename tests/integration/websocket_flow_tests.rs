@@ -7,12 +7,10 @@ use crate::test_utils::{
     next_message_with_timeout, safe_close_connection, setup_server, unique_meet_id,
 };
 use backend_lib::{
-    config::Settings,
-    messages::{ClientMessage, ServerMessage, Update},
-    websocket::WebSocketHandler,
-    AppState,
+    config::Settings, messages::ServerMessage, websocket::WebSocketHandler, AppState,
 };
 use futures_util::SinkExt;
+use openlifter_common::{ClientToServer, Update};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
@@ -43,7 +41,7 @@ async fn test_complete_flow() {
         let url = format!("ws://{addr}/ws");
 
         // Use unique meet ID
-        let meet_id = unique_meet_id("flow-meet");
+        let _meet_id = unique_meet_id("flow-meet");
 
         // Connect to the server
         let (mut ws_stream, _) = tokio_tungstenite::connect_async(url)
@@ -51,11 +49,10 @@ async fn test_complete_flow() {
             .expect("Failed to connect");
 
         // 1. Create Meet
-        let create_msg = ClientMessage::CreateMeet {
-            meet_id: meet_id.clone(),
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Flow Test".to_string(),
             password: "Password123!".to_string(),
-            location_name: "Flow Test".to_string(),
-            priority: 1,
+            endpoints: vec![],
         };
         ws_stream
             .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
@@ -70,13 +67,13 @@ async fn test_complete_flow() {
         };
 
         // 2. Send Update
-        let update_msg = ClientMessage::UpdateInit {
-            meet_id: meet_id.clone(),
+        let update_msg = ClientToServer::UpdateInit {
             session_token: session_token.clone(),
             updates: vec![Update {
-                location: "item.A".to_string(),
-                value: "123".to_string(),
-                timestamp: 1000,
+                update_key: "item.A".to_string(),
+                update_value: serde_json::json!("123"),
+                local_seq_num: 1,
+                after_server_seq_num: 0,
             }],
         };
         ws_stream
@@ -90,8 +87,7 @@ async fn test_complete_flow() {
         assert!(matches!(update_ack_result, ServerMessage::UpdateAck { .. }));
 
         // 3. Client Pull
-        let pull_msg = ClientMessage::ClientPull {
-            meet_id: meet_id.clone(),
+        let pull_msg = ClientToServer::ClientPull {
             session_token: session_token.clone(),
             last_server_seq: 0,
         };
@@ -106,8 +102,7 @@ async fn test_complete_flow() {
         assert!(matches!(pull_result, ServerMessage::ServerPull { .. }));
 
         // 4. Publish Meet
-        let publish_msg = ClientMessage::PublishMeet {
-            meet_id: meet_id.clone(),
+        let publish_msg = ClientToServer::PublishMeet {
             session_token,
             return_email: "flow@example.com".to_string(),
             opl_csv: "data".to_string(),
@@ -143,12 +138,10 @@ async fn test_complete_flow() {
 #[ignore = "These are end-to-end tests requiring a running server. Run with `cargo test -- --ignored` to execute."]
 async fn test_invalid_session() {
     let (mut handler, _temp_dir) = setup().await;
-    let meet_id = "test-invalid-session";
 
     // Send message with invalid session
     let invalid_session_result = handler
-        .handle_message(ClientMessage::UpdateInit {
-            meet_id: meet_id.to_string(),
+        .handle_message(ClientToServer::UpdateInit {
             session_token: "invalid-session-token".to_string(),
             updates: vec![],
         })
@@ -178,11 +171,10 @@ async fn test_broadcast_and_client_communication() {
 
         // Connect client 1
         let (mut ws_stream1, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
-        let create_msg = ClientMessage::CreateMeet {
-            meet_id: meet_id.clone(),
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Client 1".to_string(),
             password: "Password123!".to_string(),
-            location_name: "Client 1".to_string(),
-            priority: 1,
+            endpoints: vec![],
         };
         ws_stream1
             .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
@@ -202,11 +194,10 @@ async fn test_broadcast_and_client_communication() {
 
         // Connect client 2
         let (mut ws_stream2, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
-        let join_msg = ClientMessage::JoinMeet {
+        let join_msg = ClientToServer::JoinMeet {
             meet_id: meet_id.clone(),
             password: "Password123!".to_string(), // Assuming same password
             location_name: "Client 2".to_string(),
-            priority: 2,
         };
         ws_stream2
             .send(Message::Text(serde_json::to_string(&join_msg).unwrap()))
@@ -225,13 +216,13 @@ async fn test_broadcast_and_client_communication() {
         };
 
         // Client 1 sends an update
-        let update_msg = ClientMessage::UpdateInit {
-            meet_id: meet_id.clone(),
+        let update_msg = ClientToServer::UpdateInit {
             session_token: session_token1.clone(),
             updates: vec![Update {
-                location: "item.B".to_string(),
-                value: "Client 1 Update".to_string(),
-                timestamp: 2000,
+                update_key: "item.B".to_string(),
+                update_value: serde_json::json!("Client 1 Update"),
+                local_seq_num: 1,
+                after_server_seq_num: 0,
             }],
         };
         ws_stream1
@@ -270,11 +261,10 @@ async fn test_reconnection_and_retry() {
 
     // Step 1: Create a meet and get session token
     let create_result = handler
-        .handle_message(ClientMessage::CreateMeet {
-            meet_id: meet_id.to_string(),
+        .handle_message(ClientToServer::CreateMeet {
+            this_location_name: "Reconnect Test Location".to_string(),
             password: password.to_string(),
-            location_name: "Reconnect Test Location".to_string(),
-            priority: 5,
+            endpoints: vec![],
         })
         .await
         .unwrap();
@@ -293,15 +283,14 @@ async fn test_reconnection_and_retry() {
     // to trigger the reconnection logic
     let invalid_token = "invalid-session-token";
     let update = Update {
-        location: "test.item1".to_string(),
-        value: serde_json::to_string(&serde_json::json!({"name": "Test Lifter", "weight": 100}))
-            .unwrap(),
-        timestamp: 12345,
+        update_key: "test.item1".to_string(),
+        update_value: serde_json::json!({"name": "Test Lifter", "weight": 100}),
+        local_seq_num: 1,
+        after_server_seq_num: 0,
     };
 
     let invalid_result = handler
-        .handle_message(ClientMessage::UpdateInit {
-            meet_id: meet_id.to_string(),
+        .handle_message(ClientToServer::UpdateInit {
             session_token: invalid_token.to_string(),
             updates: vec![update.clone()],
         })
@@ -318,8 +307,7 @@ async fn test_reconnection_and_retry() {
 
     // Step 3: Send an update with a valid session token
     let update_result = handler
-        .handle_message(ClientMessage::UpdateInit {
-            meet_id: meet_id.to_string(),
+        .handle_message(ClientToServer::UpdateInit {
             session_token: session_token.clone(),
             updates: vec![update],
         })
@@ -340,8 +328,7 @@ async fn test_reconnection_and_retry() {
 
     // Step 4: Test that client pull works after the reconnection
     let pull_result = handler
-        .handle_message(ClientMessage::ClientPull {
-            meet_id: meet_id.to_string(),
+        .handle_message(ClientToServer::ClientPull {
             session_token,
             last_server_seq: 0,
         })
@@ -374,11 +361,10 @@ async fn test_state_recovery_scenarios() {
 
         // Connect client 1 (priority 8)
         let (mut ws_stream1, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
-        let create_msg = ClientMessage::CreateMeet {
-            meet_id: meet_id.clone(),
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "High Priority Client".to_string(),
             password: "Password123!".to_string(),
-            location_name: "High Priority Client".to_string(),
-            priority: 8, // Higher priority client
+            endpoints: vec![],
         };
         ws_stream1
             .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
@@ -399,13 +385,13 @@ async fn test_state_recovery_scenarios() {
         };
 
         // Send an initial update from client 1
-        let update_msg1 = ClientMessage::UpdateInit {
-            meet_id: meet_id.clone(),
+        let update_msg1 = ClientToServer::UpdateInit {
             session_token: session_token1.clone(),
             updates: vec![Update {
-                location: "lifter.A".to_string(),
-                value: r#"{"name":"Lifter A","bodyweight":80}"#.to_string(),
-                timestamp: 1000, // Timestamp 1000 (sequence 1)
+                update_key: "lifter.A".to_string(),
+                update_value: serde_json::json!({"name":"Lifter A","bodyweight":80}),
+                local_seq_num: 1,
+                after_server_seq_num: 0,
             }],
         };
         ws_stream1
@@ -421,13 +407,13 @@ async fn test_state_recovery_scenarios() {
         assert!(matches!(ack_result1, ServerMessage::UpdateAck { .. }));
 
         // Now send update with gap in sequence (skip timestamp 2000)
-        let update_msg1_gap = ClientMessage::UpdateInit {
-            meet_id: meet_id.clone(),
+        let update_msg1_gap = ClientToServer::UpdateInit {
             session_token: session_token1.clone(),
             updates: vec![Update {
-                location: "lifter.A.attempt".to_string(),
-                value: r#"{"squat1":150}"#.to_string(),
-                timestamp: 3000, // Skip 2000 to create a sequence gap
+                update_key: "lifter.A.attempt".to_string(),
+                update_value: serde_json::json!({"squat1":150}),
+                local_seq_num: 3,
+                after_server_seq_num: 1,
             }],
         };
         ws_stream1
@@ -483,11 +469,10 @@ async fn test_inactivity_recovery() {
 
         // Connect client 1
         let (mut ws_stream1, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
-        let create_msg = ClientMessage::CreateMeet {
-            meet_id: meet_id.clone(),
+        let create_msg = ClientToServer::CreateMeet {
+            this_location_name: "Inactivity Test Client".to_string(),
             password: "Password123!".to_string(),
-            location_name: "Inactivity Test Client".to_string(),
-            priority: 5,
+            endpoints: vec![],
         };
         ws_stream1
             .send(Message::Text(serde_json::to_string(&create_msg).unwrap()))
@@ -506,13 +491,13 @@ async fn test_inactivity_recovery() {
         };
 
         // Send initial update
-        let update_msg1 = ClientMessage::UpdateInit {
-            meet_id: meet_id.clone(),
+        let update_msg1 = ClientToServer::UpdateInit {
             session_token: session_token1.clone(),
             updates: vec![Update {
-                location: "lifter.A".to_string(),
-                value: r#"{"name":"Lifter A","bodyweight":80}"#.to_string(),
-                timestamp: 1000,
+                update_key: "lifter.A".to_string(),
+                update_value: serde_json::json!({"name":"Lifter A","bodyweight":80}),
+                local_seq_num: 1,
+                after_server_seq_num: 0,
             }],
         };
         ws_stream1
@@ -542,11 +527,10 @@ async fn test_inactivity_recovery() {
         let (mut ws_stream2, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
 
         // Join the same meet
-        let join_msg = ClientMessage::JoinMeet {
+        let join_msg = ClientToServer::JoinMeet {
             meet_id: meet_id.clone(),
             password: "Password123!".to_string(),
             location_name: "Reconnected Client".to_string(),
-            priority: 5,
         };
         ws_stream2
             .send(Message::Text(serde_json::to_string(&join_msg).unwrap()))
@@ -565,8 +549,7 @@ async fn test_inactivity_recovery() {
         };
 
         // Send a pull request
-        let pull_msg = ClientMessage::ClientPull {
-            meet_id: meet_id.clone(),
+        let pull_msg = ClientToServer::ClientPull {
             session_token: session_token2.clone(),
             last_server_seq: 0, // Pull all updates
         };
@@ -612,13 +595,13 @@ async fn test_inactivity_recovery() {
         }
 
         // Send a new update after reconnection
-        let update_msg2 = ClientMessage::UpdateInit {
-            meet_id: meet_id.clone(),
+        let update_msg2 = ClientToServer::UpdateInit {
             session_token: session_token2.clone(),
             updates: vec![Update {
-                location: "lifter.B".to_string(),
-                value: r#"{"name":"Lifter B","bodyweight":90}"#.to_string(),
-                timestamp: 2000,
+                update_key: "lifter.B".to_string(),
+                update_value: serde_json::json!({"name":"Lifter B","bodyweight":90}),
+                local_seq_num: 1,
+                after_server_seq_num: 0,
             }],
         };
         ws_stream2

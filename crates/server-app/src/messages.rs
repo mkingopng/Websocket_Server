@@ -6,46 +6,6 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "msgType")]
-pub enum ClientMessage {
-    CreateMeet {
-        meet_id: String,
-        password: String,
-        location_name: String,
-        priority: u8,
-    },
-    JoinMeet {
-        meet_id: String,
-        password: String,
-        location_name: String,
-        priority: u8,
-    },
-    UpdateInit {
-        meet_id: String,
-        session_token: String,
-        updates: Vec<Update>,
-    },
-    ClientPull {
-        meet_id: String,
-        session_token: String,
-        last_server_seq: u64,
-    },
-    PublishMeet {
-        meet_id: String,
-        session_token: String,
-        return_email: String,
-        opl_csv: String,
-    },
-    StateRecoveryResponse {
-        meet_id: String,
-        session_token: String,
-        last_seq_num: u64,
-        updates: Vec<Update>,
-        priority: u8,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "msgType")]
 pub enum ServerMessage {
     MeetCreated {
         meet_id: String,
@@ -208,52 +168,4 @@ pub struct MeetState {
     pub current_lift: String,
     pub current_attempt: u8,
     pub current_lifter: Option<String>,
-}
-
-// Add a test function to verify message serialization formats
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json;
-
-    #[test]
-    fn test_client_message_serialization() -> Result<(), Box<dyn std::error::Error>> {
-        // Test CreateMeet message
-        let create_meet = ClientMessage::CreateMeet {
-            meet_id: "test-meet".to_string(),
-            password: "TestPassword123!".to_string(),
-            location_name: "Test Location".to_string(),
-            priority: 10,
-        };
-
-        let json = serde_json::to_string_pretty(&create_meet)?;
-        println!("CreateMeet serialized: {}", json);
-
-        // Verify the structure
-        let parsed: serde_json::Value = serde_json::from_str(&json)?;
-        assert_eq!(parsed["msgType"], "CreateMeet");
-        assert_eq!(parsed["meet_id"], "test-meet");
-        assert_eq!(parsed["password"], "TestPassword123!");
-        assert_eq!(parsed["location_name"], "Test Location");
-        assert_eq!(parsed["priority"], 10);
-
-        // Test parsing from JSON
-        let parsed_msg: ClientMessage = serde_json::from_str(&json)?;
-        match parsed_msg {
-            ClientMessage::CreateMeet {
-                meet_id,
-                password,
-                location_name,
-                priority,
-            } => {
-                assert_eq!(meet_id, "test-meet");
-                assert_eq!(password, "TestPassword123!");
-                assert_eq!(location_name, "Test Location");
-                assert_eq!(priority, 10);
-            },
-            _ => return Err("Wrong variant".into()),
-        }
-
-        Ok(())
-    }
 }
