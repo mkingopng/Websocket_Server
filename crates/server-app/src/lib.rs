@@ -13,6 +13,8 @@ pub mod messages;
 pub mod metrics;
 pub mod middleware;
 pub mod storage;
+#[cfg(test)]
+pub mod testing;
 pub mod validation;
 pub mod websocket;
 pub mod ws_router;
@@ -53,7 +55,12 @@ impl<S> AppState<S> {
     pub async fn new(storage: S, config: &Settings) -> Result<Self, Box<dyn Error>> {
         // Create sessions directory in the storage path
         let sessions_path = PathBuf::from(&config.storage.path).join("sessions");
-        let sessions = PersistentSessionManager::new(&sessions_path).await?;
+
+        // Create the file persistence adapter and session manager
+        let file_persistence =
+            crate::auth::session::persistent::FilePersistence::new(&sessions_path).await?;
+        let sessions =
+            crate::auth::session::memory::UnifiedSessionManager::new(file_persistence).await?;
 
         let auth_rate_limiter = Arc::new(AuthRateLimiter::default());
         let auth = Arc::new(DefaultAuth::new_with_rate_limiter(

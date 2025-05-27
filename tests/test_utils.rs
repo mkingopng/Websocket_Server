@@ -9,7 +9,7 @@ use axum::extract::ws::Message as AxumMessage;
 use backend_lib::auth::AuthService;
 use backend_lib::meet_actor::{spawn_meet_actor, MeetHandle};
 use backend_lib::{
-    auth::{DefaultAuth, PersistentSessionManager},
+    auth::DefaultAuth,
     config::Settings,
     messages::{Decision, Lifter},
     storage::FlatFileStorage,
@@ -152,7 +152,17 @@ impl TestMeet {
         let temp_dir = TempDir::new().unwrap();
         let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
         let session_path = temp_dir.path().join("sessions");
-        let session_manager = PersistentSessionManager::new(&session_path).await.unwrap();
+
+        // Create the file persistence adapter and session manager
+        let file_persistence =
+            backend_lib::auth::session::persistent::FilePersistence::new(&session_path)
+                .await
+                .unwrap();
+        let session_manager =
+            backend_lib::auth::session::memory::UnifiedSessionManager::new(file_persistence)
+                .await
+                .unwrap();
+
         let auth_service = DefaultAuth::new(session_manager);
         let meet_id = uuid::Uuid::new_v4().to_string();
         let meet_handle = spawn_meet_actor(&meet_id, storage.clone()).await;

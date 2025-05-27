@@ -10,6 +10,8 @@ use std::sync::RwLock;
 use thiserror::Error;
 use tracing;
 
+pub mod middleware;
+
 // Validation constants
 const MIN_MEET_ID_LENGTH: usize = 3;
 const MAX_MEET_ID_LENGTH: usize = 50;

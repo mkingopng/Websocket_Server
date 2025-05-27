@@ -1,6 +1,6 @@
 # Code Analysis and Reduction Recommendations
 
-*Generated on: December 2024*
+*Generated on: May 27th 2025*
 
 ## 📊 Current Codebase Statistics
 
@@ -60,8 +60,7 @@
 ```
 
 ---
-
-## 🎯 **Reduction Strategies**
+## 🚀 **Reduction Plan v1**
 
 ### **1. Split the Massive `websocket.rs` (1,494 lines)**
 This is by far the largest file and should be broken down:
@@ -158,12 +157,9 @@ Identified potential duplication in:
 - Standardize test setup patterns
 - Use builder patterns for complex structs
 
----
-
 ## 🚀 **Implementation Plan**
 
 ### **Phase 1: Quick Wins (Est. -1,500 lines)**
-**Timeline: 1-2 days**
 
 1. **Extract test utilities** → Save ~300 lines
    - Move common test setup to `src/testing/`
@@ -191,7 +187,6 @@ Identified potential duplication in:
    - Remove duplicate test scenarios
 
 ### **Phase 2: Major Refactoring (Est. -2,000 lines)**
-**Timeline: 3-5 days**
 
 1. **Split `websocket.rs`** into 5-6 focused modules
    - `handler.rs` - WebSocketHandler struct and basic methods
@@ -239,19 +234,14 @@ Identified potential duplication in:
    - Separate HTTP/WebSocket concerns from business logic
    - Create clear domain boundaries
 
----
-
-## 📈 **Target Goals**
-
-| Metric | Current | Target | Reduction |
-|--------|---------|--------|-----------|
-| **Total Lines** | 9,360 | ~6,000 | -36% |
-| **Largest File** | 1,494 | <500 | -66% |
-| **Files >500 lines** | 6 files | 0 files | -100% |
-| **Avg file size** | 267 lines | ~170 lines | -36% |
-| **Functions per file** | ~8.5 | ~5-6 | -30% |
-
----
+## 📈 **Goals**
+| Metric                 | Current   | Target     | Reduction |
+|------------------------|-----------|------------|-----------|
+| **Total Lines**        | 9,360     | ~6,000     | -36%      |
+| **Largest File**       | 1,494     | <500       | -66%      |
+| **Files >500 lines**   | 6 files   | 0 files    | -100%     |
+| **Avg file size**      | 267 lines | ~170 lines | -36%      |
+| **Functions per file** | ~8.5      | ~5-6       | -30%      |
 
 ## 🔍 **Code Quality Metrics**
 
@@ -300,46 +290,6 @@ Identified potential duplication in:
 
 -----
 
-I'll analyze the entire codebase to identify opportunities for reducing repetition and making it more concise. Let me start by getting an overview of the project structure and counting files, lines of code, and functions.
-
-```bash
-find . -name "*.rs" -not -path "./target/*" | wc -l
-```
-
-```bash
-find . -name "*.rs" -not -path "./target/*" -exec wc -l {} + | tail -1
-```
-
-```bash
-find . -name "*.rs" -not -path "./target/*" -exec grep -c "^[[:space:]]*fn " {} + | awk -F: '{sum += $2} END {print "Total functions:", sum}'
-```
-Let me get a more detailed breakdown by examining the largest files and identifying patterns:
-
-```bash
-find . -name "*.rs" -not -path "./target/*" -exec wc -l {} + | sort -nr | head -15
-```
-Now let me analyze the code structure and identify patterns of duplication. Let me start by examining the largest files:
-
-Search files...
-Let me examine the session implementations to see the duplication:
-
-Read file: crates/server-app/src/auth/session/persistent.rs
-Now let me look at the project structure to understand the overall organization:
-
-Ran tool
-
-Ran tool
-Let me check for duplicate message types and validation patterns:
-
-Ran tool
-Now let me analyze the test files to see how much duplication exists there:
-
-```bash
-find tests/ -name "*.rs" -exec wc -l {} + | tail -1
-```
-Let me check for duplicate validation patterns:
-
-Ran tool
 Based on my analysis, here's a comprehensive report on the codebase with opportunities for reduction:
 
 ## 📊 Codebase Analysis Summary
@@ -419,18 +369,30 @@ Based on my analysis, here's a comprehensive report on the codebase with opportu
 
 ## 📈 Expected Results
 
-**Conservative Estimate:**
+### Conservative Estimate:
 - **Reduce from 37 to ~30 files** (eliminate 7 redundant files)
 - **Reduce from 9,555 to ~7,500 lines** (save ~2,000 lines, 21% reduction)
 - **Reduce from 49 to ~35 functions** (eliminate 14 redundant functions)
 
-**Aggressive Estimate:**
+### Aggressive Estimate:
 - **Reduce to ~25 files** (eliminate 12 files through consolidation)
-- **Reduce to ~6,500 lines** (save ~3,000 lines, 31% reduction)
+- **each file <= 500 lines** by splitting large files and removing duplication
+- **Reduce to ~6,500 lines** total code (save ~3,000 lines, 31% reduction)
 - **Reduce to ~30 functions** (eliminate 19 redundant functions)
 
 ----
 - remove genuine dead code
+- remove commented out code
 - reduce complexity
 - remove duplication in functionality
-- 
+- review all the tests and ensure that: we have no duplication in tests unless necessary; the tests we have are 
+  all being executed in pre-commit-hook.sh
+- other options for pre-commit-hooks?
+- run tarpaulin and review test coverage
+- how can we measure and improve performance?
+- how can we measure and improve memory usage?
+- how can we measure and improve the way we manage concurrency?
+- how can we deploy this? OpenLifter is going to live in the browser as it does currently, but I guess we need to 
+  have a dev version with extra features allowing you to establish a live connection (create a meet). the WSS 
+  will need to live on AWS for now. we should come up with an architecture document and a mermaid diagram to show 
+  the architecture

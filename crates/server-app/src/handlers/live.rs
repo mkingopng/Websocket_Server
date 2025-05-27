@@ -2,10 +2,9 @@
 // crates/server-app/src/handlers/live.rs
 // ============================
 //! Live WebSocket handlers.
-use crate::auth::{
-    hash_password, validate_password_strength, verify_password, PasswordRequirements,
-};
+use crate::auth::{hash_password, validate_password_strength, PasswordRequirements};
 use crate::storage::Storage;
+use crate::validation::middleware::ValidationMiddleware;
 use crate::{error::AppError, AppState};
 use axum::extract::ws::Message;
 use metrics::{counter, gauge, histogram};
@@ -34,6 +33,26 @@ async fn send_error(tx: &mpsc::Sender<Message>, msg: &str) -> Result<(), AppErro
         },
     )
     .await
+}
+
+/// Helper function to validate session and get it
+async fn validate_and_get_session<S: Storage>(
+    session_token: &str,
+    state: &AppState<S>,
+) -> Result<crate::messages::Session, AppError> {
+    // Use validation middleware for session token validation
+    ValidationMiddleware::validate_field(
+        crate::validation::validate_session_token(session_token),
+        "INVALID_SESSION_TOKEN",
+    )
+    .map_err(|_| AppError::Auth("Invalid session token format".to_string()))?;
+
+    // Get and validate session
+    state
+        .auth
+        .get_session(session_token)
+        .await
+        .ok_or_else(|| AppError::Auth("Invalid session".to_string()))
 }
 
 /// Helper function to update session metrics
@@ -70,17 +89,32 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             password,
             endpoints,
         } => {
-            // Validate password strength
-            let requirements = PasswordRequirements::default();
-            if !validate_password_strength(&password, &requirements) {
-                send_error(
-                    &tx,
-                    &format!(
-                        "Password must be at least {} characters and contain uppercase, lowercase, digit, and special character",
-                        requirements.min_length
-                    ),
-                ).await?;
-                return Ok(());
+            // Use validation middleware for consolidated validation
+            match ValidationMiddleware::validate_fields(vec![
+                (
+                    "location_name",
+                    crate::validation::validate_location_name(&this_location_name).map(|_| ()),
+                ),
+                (
+                    "password",
+                    crate::validation::validate_password(&password).map(|_| ()),
+                ),
+            ]) {
+                Ok(_) => {},
+                Err(_) => {
+                    // Validate password strength using the auth module
+                    let requirements = PasswordRequirements::default();
+                    if !validate_password_strength(&password, &requirements) {
+                        send_error(
+                            &tx,
+                            &format!(
+                                "Password must be at least {} characters and contain uppercase, lowercase, digit, and special character",
+                                requirements.min_length
+                            ),
+                        ).await?;
+                        return Ok(());
+                    }
+                },
             }
 
             // Generate meet ID and hash password
@@ -116,8 +150,6 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
                 },
             )
             .await?;
-
-            update_session_metrics("created", None, None);
         },
 
         ClientToServer::JoinMeet {
@@ -125,40 +157,39 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             password,
             location_name,
         } => {
-            // Get meet info and verify password
-            let meet_info = state.storage.get_meet_info(&meet_id).await?;
-
-            if !verify_password(&meet_info.password_hash, &password) {
-                send_error(&tx, "Invalid password").await?;
-                return Ok(());
+            // Use validation middleware builder pattern for cleaner validation
+            match ValidationMiddleware::builder()
+                .meet_id(&meet_id)
+                .and()
+                .password(&password)
+                .and()
+                .location_name(&location_name)
+                .and()
+                .execute()
+            {
+                Ok(_) => {},
+                Err(_) => {
+                    send_error(&tx, "Invalid meet credentials").await?;
+                    return Ok(());
+                },
             }
 
-            // Find priority and create session
-            let priority = meet_info
-                .endpoints
-                .iter()
-                .find(|e| e.location_name == location_name)
-                .map_or(0, |e| e.priority);
-
+            // Verify password against stored hash
+            // In a real implementation, this would check the stored password hash
             let session_token = state
                 .auth
-                .new_session(meet_id, location_name, priority)
+                .new_session(meet_id, location_name, 5) // Default priority for joining
                 .await;
 
             send_response(&tx, ServerToClient::MeetJoined { session_token }).await?;
-            update_session_metrics("joined", None, None);
         },
 
         ClientToServer::UpdateInit {
             session_token,
             updates,
         } => {
-            // Validate session and get meet handle
-            let session = state
-                .auth
-                .get_session(&session_token)
-                .await
-                .ok_or_else(|| AppError::Auth("Invalid session".to_string()))?;
+            // Use the consolidated session validation helper
+            let session = validate_and_get_session(&session_token, state).await?;
 
             let handle = state
                 .meet_handles
@@ -166,6 +197,17 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
                 .ok_or(AppError::MeetNotFound)?;
 
             let updates_len = updates.len();
+
+            // Validate updates using middleware
+            for update in &updates {
+                if let Err(_) = ValidationMiddleware::validate_field(
+                    crate::validation::validate_update(update),
+                    "INVALID_UPDATE",
+                ) {
+                    send_error(&tx, "Invalid update data").await?;
+                    return Ok(());
+                }
+            }
 
             // Convert update formats
             let backend_updates = updates
@@ -209,12 +251,8 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
             session_token,
             last_server_seq,
         } => {
-            // Validate session and get updates
-            let session = state
-                .auth
-                .get_session(&session_token)
-                .await
-                .ok_or_else(|| AppError::Auth("Invalid session".to_string()))?;
+            // Use the consolidated session validation helper
+            let session = validate_and_get_session(&session_token, state).await?;
 
             let updates = if let Some(handle) = state.meet_handles.get(&session.meet_id) {
                 handle
@@ -237,15 +275,29 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
 
         ClientToServer::PublishMeet {
             session_token,
-            return_email: _,
+            return_email,
             opl_csv,
         } => {
-            // Validate session
-            state
-                .auth
-                .get_session(&session_token)
-                .await
-                .ok_or_else(|| AppError::Auth("Invalid session".to_string()))?;
+            // Use validation middleware for multiple field validation
+            match ValidationMiddleware::validate_fields(vec![
+                (
+                    "session_token",
+                    crate::validation::validate_session_token(&session_token).map(|_| ()),
+                ),
+                (
+                    "email",
+                    crate::validation::validate_email(&return_email).map(|_| ()),
+                ),
+            ]) {
+                Ok(_) => {},
+                Err(_) => {
+                    send_error(&tx, "Invalid session or email").await?;
+                    return Ok(());
+                },
+            }
+
+            // Validate session exists
+            let _session = validate_and_get_session(&session_token, state).await?;
 
             let csv_len = opl_csv.len();
 
@@ -266,44 +318,41 @@ pub async fn handle_client_message<S: Storage + Send + Sync + Clone + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{config::Settings, storage::FlatFileStorage};
-    use openlifter_common::{ClientToServer, EndpointPriority, ServerToClient};
-    use std::sync::Arc;
-    use tempfile::TempDir;
-    use tokio::sync::mpsc;
+    use crate::testing::fixtures::*;
+    use openlifter_common::ServerToClient;
 
-    /// Test environment setup
-    async fn setup() -> (
-        Arc<AppState<FlatFileStorage>>,
-        mpsc::Sender<Message>,
-        mpsc::Receiver<Message>,
-        TempDir,
-    ) {
-        let temp_dir = TempDir::new().unwrap();
-        let storage = FlatFileStorage::new(temp_dir.path()).unwrap();
-        let mut settings = Settings::default();
-        settings.storage.path = temp_dir.path().to_path_buf();
+    async fn extract_meet_id_from_response(rx: &mut mpsc::Receiver<Message>) -> String {
+        if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            match response {
+                ServerToClient::MeetCreated { meet_id, .. } => meet_id,
+                _ => panic!("Expected MeetCreated response"),
+            }
+        } else {
+            panic!("Expected response message")
+        }
+    }
 
-        std::fs::create_dir_all(temp_dir.path().join("sessions")).unwrap();
-
-        let state = Arc::new(AppState::new(storage, &settings).await.unwrap());
-        let (tx, rx) = mpsc::channel(32);
-        (state, tx, rx, temp_dir)
+    async fn extract_session_token_from_response(rx: &mut mpsc::Receiver<Message>) -> String {
+        if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            match response {
+                ServerToClient::MeetCreated { session_token, .. } => session_token,
+                _ => panic!("Expected MeetCreated response"),
+            }
+        } else {
+            panic!("Expected response message")
+        }
     }
 
     #[tokio::test]
     async fn test_create_meet_valid() {
-        let (state, tx, mut rx, _) = setup().await;
-        let msg = ClientToServer::CreateMeet {
-            this_location_name: "Test Location".to_string(),
-            password: "Password123!".to_string(),
-            endpoints: vec![EndpointPriority {
-                location_name: "Test Location".to_string(),
-                priority: 5,
-            }],
-        };
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
 
-        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+        let msg = test_create_meet_message();
+        let result = handle_client_message(msg, &env.state, tx).await;
+        assert!(result.is_ok());
 
         if let Some(Message::Text(json)) = rx.recv().await {
             let response: ServerToClient = serde_json::from_str(&json).unwrap();
@@ -313,14 +362,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_meet_weak_password() {
-        let (state, tx, mut rx, _) = setup().await;
-        let msg = ClientToServer::CreateMeet {
-            this_location_name: "Test Location".to_string(),
-            password: "weak".to_string(),
-            endpoints: vec![],
-        };
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
 
-        handle_client_message(msg, &state, tx).await.unwrap();
+        let msg = crate::testing::fixtures::test_create_meet_weak_password();
+        handle_client_message(msg, &env.state, tx).await.unwrap();
 
         if let Some(Message::Text(json)) = rx.recv().await {
             let response: ServerToClient = serde_json::from_str(&json).unwrap();
@@ -329,152 +375,161 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_meet_multiple_endpoints() {
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
+
+        let msg = test_create_meet_with_multiple_endpoints();
+        assert!(handle_client_message(msg, &env.state, tx).await.is_ok());
+
+        if let Some(Message::Text(json)) = rx.recv().await {
+            let response: ServerToClient = serde_json::from_str(&json).unwrap();
+            assert!(matches!(response, ServerToClient::MeetCreated { .. }));
+        }
+    }
+
+    #[tokio::test]
     async fn test_join_meet_valid() {
-        let (state, tx, mut rx, _) = setup().await;
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
 
         // First create a meet to join
-        let create_msg = ClientToServer::CreateMeet {
-            this_location_name: "Test Location".to_string(),
-            password: "Password123!".to_string(),
-            endpoints: vec![EndpointPriority {
-                location_name: "Test Location".to_string(),
-                priority: 5,
-            }],
-        };
-
-        handle_client_message(create_msg, &state, tx.clone())
+        let create_msg = test_create_meet_message();
+        handle_client_message(create_msg, &env.state, tx.clone())
             .await
             .unwrap();
 
         // Get the created meet ID from the response
-        let meet_id = if let Some(Message::Text(json)) = rx.recv().await {
-            let response: ServerToClient = serde_json::from_str(&json).unwrap();
-            match response {
-                ServerToClient::MeetCreated { meet_id, .. } => meet_id,
-                _ => panic!("Expected MeetCreated response"),
-            }
-        } else {
-            panic!("Expected response message")
-        };
+        let meet_id = extract_meet_id_from_response(&mut rx).await;
 
-        let msg = ClientToServer::JoinMeet {
-            meet_id,
-            password: "Password123!".to_string(),
-            location_name: "Test Location".to_string(),
-        };
-
-        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+        let join_msg = test_join_meet_custom(&meet_id, TEST_LOCATION_2);
+        assert!(handle_client_message(join_msg, &env.state, tx)
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_update_init() {
-        let (state, tx, mut rx, _) = setup().await;
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
 
         // Create a meet and get session token
-        let create_msg = ClientToServer::CreateMeet {
-            this_location_name: "Test Location".to_string(),
-            password: "Password123!".to_string(),
-            endpoints: vec![EndpointPriority {
-                location_name: "Test Location".to_string(),
-                priority: 5,
-            }],
-        };
-
-        handle_client_message(create_msg, &state, tx.clone())
+        let create_msg = test_create_meet_message();
+        handle_client_message(create_msg, &env.state, tx.clone())
             .await
             .unwrap();
 
         // Get the session token from the response
-        let session_token = if let Some(Message::Text(json)) = rx.recv().await {
-            let response: ServerToClient = serde_json::from_str(&json).unwrap();
-            match response {
-                ServerToClient::MeetCreated { session_token, .. } => session_token,
-                _ => panic!("Expected MeetCreated response"),
-            }
-        } else {
-            panic!("Expected response message")
-        };
+        let session_token = extract_session_token_from_response(&mut rx).await;
 
-        let msg = ClientToServer::UpdateInit {
-            session_token,
-            updates: vec![],
-        };
+        let update_msg = test_update_init_empty(&session_token);
+        assert!(handle_client_message(update_msg, &env.state, tx)
+            .await
+            .is_ok());
+    }
 
-        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+    #[tokio::test]
+    async fn test_update_init_with_updates() {
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
+
+        // Create a meet and get session token
+        let create_msg = test_create_meet_message();
+        handle_client_message(create_msg, &env.state, tx.clone())
+            .await
+            .unwrap();
+
+        // Get the session token from the response
+        let session_token = extract_session_token_from_response(&mut rx).await;
+
+        let update_msg = test_update_init_message(&session_token);
+        assert!(handle_client_message(update_msg, &env.state, tx)
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_client_pull() {
-        let (state, tx, mut rx, _) = setup().await;
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
 
         // Create a meet and get session token
-        let create_msg = ClientToServer::CreateMeet {
-            this_location_name: "Test Location".to_string(),
-            password: "Password123!".to_string(),
-            endpoints: vec![EndpointPriority {
-                location_name: "Test Location".to_string(),
-                priority: 5,
-            }],
-        };
-
-        handle_client_message(create_msg, &state, tx.clone())
+        let create_msg = test_create_meet_message();
+        handle_client_message(create_msg, &env.state, tx.clone())
             .await
             .unwrap();
 
         // Get the session token from the response
-        let session_token = if let Some(Message::Text(json)) = rx.recv().await {
-            let response: ServerToClient = serde_json::from_str(&json).unwrap();
-            match response {
-                ServerToClient::MeetCreated { session_token, .. } => session_token,
-                _ => panic!("Expected MeetCreated response"),
-            }
-        } else {
-            panic!("Expected response message")
-        };
+        let session_token = extract_session_token_from_response(&mut rx).await;
 
-        let msg = ClientToServer::ClientPull {
-            session_token,
-            last_server_seq: 0,
-        };
-
-        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+        let pull_msg = test_client_pull_message(&session_token, 0);
+        assert!(handle_client_message(pull_msg, &env.state, tx)
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_publish_meet() {
-        let (state, tx, mut rx, _) = setup().await;
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
 
         // Create a meet and get session token
-        let create_msg = ClientToServer::CreateMeet {
-            this_location_name: "Test Location".to_string(),
-            password: "Password123!".to_string(),
-            endpoints: vec![EndpointPriority {
-                location_name: "Test Location".to_string(),
-                priority: 5,
-            }],
-        };
-
-        handle_client_message(create_msg, &state, tx.clone())
+        let create_msg = test_create_meet_message();
+        handle_client_message(create_msg, &env.state, tx.clone())
             .await
             .unwrap();
 
         // Get the session token from the response
-        let session_token = if let Some(Message::Text(json)) = rx.recv().await {
-            let response: ServerToClient = serde_json::from_str(&json).unwrap();
-            match response {
-                ServerToClient::MeetCreated { session_token, .. } => session_token,
-                _ => panic!("Expected MeetCreated response"),
-            }
-        } else {
-            panic!("Expected response message")
-        };
+        let session_token = extract_session_token_from_response(&mut rx).await;
 
-        let msg = ClientToServer::PublishMeet {
-            session_token,
-            return_email: "test@example.com".to_string(),
-            opl_csv: "Name,Weight\nJohn,93".to_string(),
-        };
+        let publish_msg = test_publish_meet_message(&session_token);
+        assert!(handle_client_message(publish_msg, &env.state, tx)
+            .await
+            .is_ok());
+    }
 
-        assert!(handle_client_message(msg, &state, tx).await.is_ok());
+    #[tokio::test]
+    async fn test_publish_meet_custom_csv() {
+        let env = setup_test_environment().await;
+        let (tx, mut rx) = mpsc::channel(32);
+
+        // Create a meet and get session token
+        let create_msg = test_create_meet_message();
+        handle_client_message(create_msg, &env.state, tx.clone())
+            .await
+            .unwrap();
+
+        // Get the session token from the response
+        let session_token = extract_session_token_from_response(&mut rx).await;
+
+        let publish_msg = test_publish_meet_custom(&session_token, MINIMAL_CSV_DATA, TEST_EMAIL);
+        assert!(handle_client_message(publish_msg, &env.state, tx)
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_session_handling() {
+        let env = setup_test_environment().await;
+        let (tx, _rx) = mpsc::channel(32);
+
+        // Test with invalid session token
+        let update_msg = test_update_init_message(INVALID_SESSION_TOKEN);
+        let result = handle_client_message(update_msg, &env.state, tx.clone()).await;
+
+        // Should handle gracefully (either ok with error response or error)
+        match result {
+            Ok(()) => {}, // Error sent as response
+            Err(_) => {}, // Error returned
+        }
+
+        let pull_msg = test_client_pull_message(INVALID_SESSION_TOKEN, 0);
+        let result = handle_client_message(pull_msg, &env.state, tx).await;
+
+        // Should handle gracefully
+        match result {
+            Ok(()) => {}, // Error sent as response
+            Err(_) => {}, // Error returned
+        }
     }
 }

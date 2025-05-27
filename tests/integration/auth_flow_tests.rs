@@ -2,20 +2,13 @@
 // tests/integration/auth_flow_tests.rs
 // ====================================
 //! Integration tests for the authentication flow in the backend library.
-use backend_lib::auth::{AuthService, DefaultAuth, PersistentSessionManager};
-use tempfile::tempdir;
+use backend_lib::auth::{AuthService, DefaultAuth};
+use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_auth_service_flow() {
-    // Create a temporary directory for session storage
-    let temp_dir = tempdir().unwrap();
-    let session_path = temp_dir.path().join("sessions");
-
-    // Create a session manager
-    let session_manager = PersistentSessionManager::new(&session_path).await.unwrap();
-
-    // Create the auth service
-    let auth_service = DefaultAuth::new(session_manager);
+    // Create the auth service using the helper function
+    let auth_service = setup_auth_service().await;
 
     // Test session creation
     let meet_id = "test-meet-123".to_string();
@@ -43,4 +36,21 @@ async fn test_auth_service_flow() {
     // Test invalid session
     let is_valid = auth_service.validate_session("invalid-token").await;
     assert!(!is_valid, "Invalid session should not be valid");
+}
+
+async fn setup_auth_service() -> DefaultAuth {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let session_path = temp_dir.path().join("sessions");
+
+    // Create the file persistence adapter and session manager
+    let file_persistence =
+        backend_lib::auth::session::persistent::FilePersistence::new(&session_path)
+            .await
+            .unwrap();
+    let session_manager =
+        backend_lib::auth::session::memory::UnifiedSessionManager::new(file_persistence)
+            .await
+            .unwrap();
+
+    DefaultAuth::new(session_manager)
 }
